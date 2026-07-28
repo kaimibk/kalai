@@ -1,0 +1,113 @@
+@import "tailwindcss";
+@source ".";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Outfit', system-ui, -apple-system, sans-serif;
+
+  --color-terracotta-50: #FAF0EC;
+  --color-terracotta-100: #F5DEC6;
+  --color-terracotta-200: #EBB6A5;
+  --color-terracotta-400: #E07A5F;
+  --color-terracotta-500: #C85A32;
+  --color-terracotta-600: #AB4522;
+  --color-terracotta-900: #4D1A0A;
+
+  --color-celadon-400: #81B29A;
+  --color-celadon-500: #579B7B;
+  --color-celadon-900: #1B3B2D;
+
+  --color-clay-100: #F4F1DE;
+  --color-clay-200: #E4DFC3;
+  --color-clay-800: #2C2827;
+  --color-clay-900: #1C1918;
+
+  --color-stoneware-800: #262322;
+  --color-stoneware-900: #181616;
+}
+
+/* Custom Pottery Utility Styles */
+.ceramic-card {
+  background-color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 1rem;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+:where(.dark, .dark *) .ceramic-card,
+.dark .ceramic-card {
+  background-color: rgba(38, 35, 34, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3);
+}
+
+.ceramic-card:hover {
+  border-color: rgba(224, 122, 95, 0.4);
+}
+
+.cone-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.cone-06 {
+  background-color: rgba(224, 122, 95, 0.15);
+  color: #C85A32;
+  border: 1px solid rgba(224, 122, 95, 0.3);
+}
+
+:where(.dark, .dark *) .cone-06,
+.dark .cone-06 {
+  background-color: rgba(224, 122, 95, 0.15);
+  color: #F2CC8F;
+  border: 1px solid rgba(242, 204, 143, 0.3);
+}
+
+.cone-6 {
+  background-color: rgba(129, 178, 154, 0.15);
+  color: #3B7258;
+  border: 1px solid rgba(129, 178, 154, 0.4);
+}
+
+:where(.dark, .dark *) .cone-6,
+.dark .cone-6 {
+  background-color: rgba(129, 178, 154, 0.15);
+  color: #81B29A;
+  border: 1px solid rgba(129, 178, 154, 0.3);
+}
+
+.cone-10 {
+  background-color: rgba(230, 57, 70, 0.15);
+  color: #C12A36;
+  border: 1px solid rgba(230, 57, 70, 0.4);
+}
+
+:where(.dark, .dark *) .cone-10,
+.dark .cone-10 {
+  background-color: rgba(230, 57, 70, 0.15);
+  color: #E63946;
+  border: 1px solid rgba(230, 57, 70, 0.3);
+}
+
+/* Global Tailwind Scrollbar Styles */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #d6d3d1 transparent;
+  }
+
+  :where(.dark, .dark *) {
+    scrollbar-color: #44403c transparent;
+  }
+}

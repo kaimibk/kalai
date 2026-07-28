@@ -1,0 +1,32 @@
+{
+	"name": "Kālai Ceramic Studio Dev",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"features": {
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+	},
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"css.lint.unknownAtRules": "ignore",
+				"editor.formatOnSave": true
+			},
+			"extensions": [
+				"svelte.svelte-vscode",
+				"bradlc.vscode-tailwindcss",
+				"esbenp.prettier-vscode",
+				"dbaeumer.vscode-eslint"
+			]
+		}
+	},
+	"forwardPorts": [3000, 5173],
+	"portsAttributes": {
+		"3000": {
+			"label": "Kālai Web App",
+			"onAutoForward": "openBrowser"
+		}
+	},
+	"postCreateCommand": "npm install",
+	"remoteUser": "node"
+}
