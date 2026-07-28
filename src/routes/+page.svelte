@@ -298,6 +298,32 @@
 			updated_at: new Date('2026-07-24T00:00:00'),
 			stage_logs: [],
 			glaze_layers: []
+		},
+		{
+			id: 'p-failed-101',
+			user_id: 'user-1',
+			title: 'Cracked Slab Pitcher',
+			description: 'Bottom wall cracked during bisque expansion.',
+			piece_type: 'Pitcher',
+			clay_body_id: 'cb-4',
+			clay_body_name: 'Red Terracotta Earthenware',
+			stage: 'done',
+			is_failed: true,
+			failure_stage: 'bone_dry',
+			failure_reason: 'Thermal stress S-crack in base',
+			failed_at: new Date('2026-07-24T00:00:00'),
+			target_bisque_cone: 'Cone 04',
+			target_glaze_cone: 'Cone 06',
+			weight_grams: 850,
+			height_cm: 18.0,
+			width_cm: 12.0,
+			initial_photo_url: null,
+			started_at: new Date('2026-07-20T00:00:00'),
+			due_date: null,
+			created_at: new Date('2026-07-20T00:00:00'),
+			updated_at: new Date('2026-07-24T00:00:00'),
+			stage_logs: [],
+			glaze_layers: []
 		}
 	]);
 
@@ -305,7 +331,7 @@
 	let showGlazeLibraryModal = $state(false);
 	let showClayLibraryModal = $state(false);
 	let showPyrometricChartModal = $state(false);
-	let showFailedDrawer = $state(false);
+	let showLossArchive = $state(false);
 	let selectedPiece = $state<CeramicPiece | null>(null);
 	let mobileActiveStage = $state<CeramicStage | 'all'>('all');
 
@@ -581,9 +607,13 @@
 
 				pieces = pieces.map(p => {
 					if (p.id === draggedPieceId) {
+						const isClearingFailed = p.is_failed && targetStage !== 'done';
 						return {
 							...p,
 							stage: targetStage,
+							is_failed: targetStage === 'done' ? p.is_failed : false,
+							failure_stage: isClearingFailed ? null : p.failure_stage,
+							failure_reason: isClearingFailed ? null : p.failure_reason,
 							started_at: isMovingOutFromBacklog ? (p.started_at || now) : p.started_at,
 							updated_at: now
 						};
@@ -611,7 +641,9 @@
 	}
 
 	function getStageCardGroups(stageId: CeramicStage): KanbanDisplayGroup[] {
-		const columnPieces = activePieces.filter(p => p.stage === stageId);
+		const columnPieces = stageId === 'done'
+			? (showLossArchive ? pieces.filter(p => p.stage === 'done') : pieces.filter(p => p.stage === 'done' && !p.is_failed))
+			: pieces.filter(p => p.stage === stageId && !p.is_failed);
 		const groups: KanbanDisplayGroup[] = [];
 
 		const batchMap = new Map<string, CeramicPiece[]>();
@@ -620,7 +652,8 @@
 		for (const piece of columnPieces) {
 			if (piece.batch_id) {
 				const glazeSig = piece.glaze_layers ? piece.glaze_layers.map(g => g.glaze_name).sort().join('|') : '';
-				const key = `${piece.batch_id}::${glazeSig}`;
+				const failSig = piece.is_failed ? 'failed' : 'active';
+				const key = `${piece.batch_id}::${glazeSig}::${failSig}`;
 				if (!batchMap.has(key)) batchMap.set(key, []);
 				batchMap.get(key)!.push(piece);
 			} else {
@@ -639,7 +672,9 @@
 
 		// Add stacked batch groups
 		for (const [key, bPieces] of batchMap.entries()) {
-			const [bId, glazeSig] = key.split('::');
+			const parts = key.split('::');
+			const bId = parts[0];
+			const glazeSig = parts[1];
 			if (bPieces.length === 1) {
 				// Single piece in stage
 				groups.push({
@@ -748,11 +783,12 @@
 
 			showToast(`Detached ${count} piece(s) from batch as standalone pieces!`);
 		} else if (splitAction === 'fail') {
-			// Flag selected as failed
+			// Flag selected as failed and move to Finished
 			pieces = pieces.map(p => {
 				if (selectedSet.has(p.id)) {
 					return {
 						...p,
+						stage: 'done',
 						is_failed: true,
 						failure_stage: p.stage,
 						failure_reason: splitFailReason,
@@ -762,7 +798,7 @@
 				return p;
 			});
 
-			showToast(`Marked ${count} piece(s) as failed ("${splitFailReason}"). Remaining batch items stay active!`);
+			showToast(`Moved ${count} piece(s) to Finished & flagged as failed ("${splitFailReason}")!`);
 		}
 
 		isSplitModalOpen = false;
@@ -958,10 +994,12 @@
 	function confirmFlagAsFailed() {
 		if (!pieceToFail) return;
 		const now = new Date();
+		const targetTitle = pieceToFail.title;
 		pieces = pieces.map(p => {
 			if (p.id === pieceToFail!.id) {
 				return {
 					...p,
+					stage: 'done',
 					is_failed: true,
 					failure_stage: p.stage,
 					failure_reason: failReason,
@@ -975,10 +1013,22 @@
 		}
 		isFailModalOpen = false;
 		pieceToFail = null;
+		showToast(`Piece "${targetTitle}" moved to Finished & flagged as failed`);
 	}
 
 	function restoreFailedPiece(pieceId: string) {
-		pieces = pieces.map(p => p.id === pieceId ? { ...p, is_failed: false, failure_stage: null, failure_reason: null } : p);
+		const target = pieces.find(p => p.id === pieceId);
+		const restoredStage: CeramicStage = (target?.failure_stage as CeramicStage) || 'backlog';
+		pieces = pieces.map(p => p.id === pieceId ? {
+			...p,
+			stage: restoredStage,
+			is_failed: false,
+			failure_stage: null,
+			failure_reason: null
+		} : p);
+		if (target) {
+			showToast(`Restored "${target.title}" to ${restoredStage} stage`);
+		}
 	}
 
 	function addGlazeTagToPiece() {
@@ -1136,17 +1186,18 @@
 				<span class="hidden sm:inline md:hidden">Clay ({clayBodies.length})</span>
 			</button>
 
-			{#if failedPieces.length > 0}
-				<button 
-					onclick={() => showFailedDrawer = !showFailedDrawer}
-					class="px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800/40 flex items-center gap-1.5 transition"
-					title="Loss Archive"
-				>
-					<ShieldAlert class="w-4 h-4 text-red-500 dark:text-red-400" />
-					<span class="hidden md:inline">Loss Archive ({failedPieces.length})</span>
-					<span class="hidden sm:inline md:hidden">Losses ({failedPieces.length})</span>
-				</button>
-			{/if}
+			<button 
+				onclick={() => showLossArchive = !showLossArchive}
+				class="px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition border cursor-pointer {showLossArchive ? 'bg-red-600 text-white border-red-700 shadow-md ring-2 ring-red-500/30' : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 border-red-200 dark:border-red-800/40'}"
+				title="Toggle Loss Archive (Failed Pieces in Finished Lane)"
+			>
+				<ShieldAlert class="w-4 h-4 {showLossArchive ? 'text-white' : 'text-red-500 dark:text-red-400'}" />
+				<span class="hidden md:inline">Loss Archive ({failedPieces.length})</span>
+				<span class="hidden sm:inline md:hidden">Losses ({failedPieces.length})</span>
+				{#if showLossArchive}
+					<span class="ml-1 text-[9px] uppercase font-extrabold bg-white/20 text-white px-1.5 py-0.5 rounded">Shown</span>
+				{/if}
+			</button>
 
 			<button 
 				onclick={() => isNewPieceModalOpen = true}
@@ -1158,42 +1209,6 @@
 			</button>
 		</div>
 	</div>
-
-	<!-- FAILED PIECES ARCHIVE DRAWER -->
-	{#if showFailedDrawer}
-		<div class="ceramic-card p-4 rounded-2xl border border-red-300 dark:border-red-900/40 bg-gradient-to-r from-red-50/50 via-stone-100 to-red-50/50 dark:from-red-950/20 dark:via-stone-900 dark:to-red-950/20 space-y-3 flex-shrink-0">
-			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-2 text-red-600 dark:text-red-400 font-display font-bold text-sm">
-					<AlertTriangle class="w-5 h-5" />
-					<h3>Ceramic Failures & Loss Archive</h3>
-				</div>
-				<button onclick={() => showFailedDrawer = false} class="text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white text-xs">Close</button>
-			</div>
-
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-				{#each failedPieces as fp}
-					<div class="bg-white dark:bg-stone-950/80 p-3 rounded-xl border border-red-200 dark:border-red-900/30 space-y-1.5 shadow-xs dark:shadow-none">
-						<div class="flex items-center justify-between">
-							<span class="font-bold text-stone-900 dark:text-stone-200">{fp.title}</span>
-							<span class="text-[10px] uppercase font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-950 px-2 py-0.5 rounded border border-red-200 dark:border-red-900">
-								Failed at {fp.failure_stage}
-							</span>
-						</div>
-						<p class="text-stone-600 dark:text-stone-400 text-[11px] font-semibold">Reason: "{fp.failure_reason}"</p>
-						<div class="pt-1.5 border-t border-stone-200 dark:border-stone-800 flex justify-end">
-							<button 
-								onclick={() => restoreFailedPiece(fp.id)}
-								class="text-[11px] text-[#3B7258] dark:text-[#81B29A] hover:underline flex items-center gap-1 font-semibold"
-							>
-								<RotateCcw class="w-3 h-3" />
-								<span>Restore to Active</span>
-							</button>
-						</div>
-					</div>
-				{/each}
-			</div>
-		</div>
-	{/if}
 
 	<!-- MOBILE STAGE SELECTOR TABS (Visible on mobile/tablet `< xl`) -->
 	<div class="flex xl:hidden items-center gap-1.5 overflow-x-auto pb-2 pt-0.5 no-scrollbar flex-shrink-0">
@@ -1209,7 +1224,9 @@
 		</button>
 
 		{#each STAGES as stageInfo}
-			{@const count = activePieces.filter(p => p.stage === stageInfo.id).length}
+			{@const count = stageInfo.id === 'done'
+				? (showLossArchive ? pieces.filter(p => p.stage === 'done').length : pieces.filter(p => p.stage === 'done' && !p.is_failed).length)
+				: activePieces.filter(p => p.stage === stageInfo.id).length}
 			<button
 				type="button"
 				onclick={() => mobileActiveStage = stageInfo.id}
@@ -1228,7 +1245,9 @@
 	<div class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto xl:overflow-hidden pb-2">
 		<div class="flex-1 min-h-0 flex overflow-x-auto snap-x snap-mandatory gap-3.5 sm:gap-4 xl:grid xl:grid-cols-6 xl:overflow-visible pb-2 xl:pb-0">
 			{#each STAGES as stageInfo}
-				{@const columnPieces = activePieces.filter(p => p.stage === stageInfo.id)}
+				{@const columnPieces = stageInfo.id === 'done'
+					? (showLossArchive ? pieces.filter(p => p.stage === 'done') : pieces.filter(p => p.stage === 'done' && !p.is_failed))
+					: activePieces.filter(p => p.stage === stageInfo.id)}
 				{#if mobileActiveStage === 'all' || mobileActiveStage === stageInfo.id}
 					<div 
 						role="region"
@@ -1279,7 +1298,7 @@
 										draggable="true"
 										ondragstart={(e) => handleBatchDragStart(e, group.batchId!, stageInfo.id, group.glazeSignature || '')}
 										ondragend={handleDragEnd}
-										class="relative z-10 -translate-x-2 -translate-y-2 group-hover/stack:-translate-x-2.5 group-hover/stack:-translate-y-2.5 transition-transform duration-300 ceramic-card snap-start p-3.5 rounded-xl border border-stone-300/90 dark:border-stone-700 bg-gradient-to-br from-stone-50 via-white to-stone-100/90 dark:from-stone-900 dark:via-stone-900 dark:to-stone-950 border-l-4 border-l-[#E07A5F] hover:border-r-[#E07A5F]/50 group space-y-3 cursor-grab active:cursor-grabbing shadow-lg {draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}` ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''} {isCardHovered ? 'ring-2 ring-[#E07A5F] border-[#E07A5F] bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20' : ''}"
+										class="relative z-10 -translate-x-2 -translate-y-2 group-hover/stack:-translate-x-2.5 group-hover/stack:-translate-y-2.5 transition-transform duration-300 ceramic-card snap-start p-3.5 rounded-xl border group space-y-3 cursor-grab active:cursor-grabbing shadow-lg {group.primaryPiece.is_failed ? 'border-2 border-red-500 dark:border-red-600 bg-gradient-to-br from-red-50/90 via-white to-red-100/40 dark:from-red-950/50 dark:via-stone-900 dark:to-red-950/40 border-l-4 border-l-red-600 shadow-red-500/10' : 'border-stone-300/90 dark:border-stone-700 bg-gradient-to-br from-stone-50 via-white to-stone-100/90 dark:from-stone-900 dark:via-stone-900 dark:to-stone-950 border-l-4 border-l-[#E07A5F] hover:border-r-[#E07A5F]/50'} {draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}` ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''} {isCardHovered ? 'ring-2 ring-[#E07A5F] border-[#E07A5F] bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20' : ''}"
 									>
 										<!-- Merge Hover Highlight Banner -->
 										{#if isCardHovered}
@@ -1291,10 +1310,17 @@
 
 										<!-- Stacked Visual Indicator Badge -->
 										<div class="flex items-center justify-between">
-											<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#E07A5F]/20 dark:bg-[#E07A5F]/25 text-[#C85A32] dark:text-[#E07A5F] border border-[#E07A5F]/40 text-[10px] font-extrabold tracking-wide shadow-2xs">
-												<Layers2 class="w-3.5 h-3.5" />
-												<span>{group.pieces.length} PCS STACK</span>
-											</div>
+											{#if group.primaryPiece.is_failed}
+												<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/20 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-500/40 text-[10px] font-extrabold tracking-wide shadow-2xs">
+													<AlertTriangle class="w-3.5 h-3.5 text-red-500" />
+													<span>{group.pieces.length} PCS FAILED STACK</span>
+												</div>
+											{:else}
+												<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#E07A5F]/20 dark:bg-[#E07A5F]/25 text-[#C85A32] dark:text-[#E07A5F] border border-[#E07A5F]/40 text-[10px] font-extrabold tracking-wide shadow-2xs">
+													<Layers2 class="w-3.5 h-3.5" />
+													<span>{group.pieces.length} PCS STACK</span>
+												</div>
+											{/if}
 											<span class="cone-badge cone-6 text-[9px] px-1.5 py-0.5 flex-shrink-0">
 												{group.primaryPiece.target_glaze_cone}
 											</span>
@@ -1425,7 +1451,7 @@
 									ondragover={(e) => handleCardDragOver(e, group)}
 									ondragleave={(e) => handleCardDragLeave(e, group)}
 									ondrop={(e) => handleCardDrop(e, group)}
-									class="ceramic-card snap-start p-3.5 rounded-xl border border-stone-200 dark:border-stone-800/90 hover:border-[#E07A5F]/50 transition group relative space-y-3 cursor-grab active:cursor-grabbing {draggedPieceId === piece.id ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''} {isCardHovered ? 'ring-2 ring-[#E07A5F] border-[#E07A5F] bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20 scale-[1.02]' : ''}"
+									class="ceramic-card snap-start p-3.5 rounded-xl transition group relative space-y-3 cursor-grab active:cursor-grabbing {piece.is_failed ? 'border-2 border-red-500 dark:border-red-600 bg-gradient-to-br from-red-50/90 via-white to-red-100/40 dark:from-red-950/50 dark:via-stone-900 dark:to-red-950/40 shadow-md shadow-red-500/10' : 'border border-stone-200 dark:border-stone-800/90 hover:border-[#E07A5F]/50'} {draggedPieceId === piece.id ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''} {isCardHovered ? 'ring-2 ring-[#E07A5F] border-[#E07A5F] bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20 scale-[1.02]' : ''}"
 								>
 									<!-- Merge Hover Highlight Banner -->
 									{#if isCardHovered}
@@ -1434,6 +1460,20 @@
 											<span>Drop card to merge into batch!</span>
 										</div>
 									{/if}
+
+									<!-- Failed Header Banner -->
+									{#if piece.is_failed}
+										<div class="flex items-center justify-between bg-red-100 dark:bg-red-950/90 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 px-2.5 py-1 rounded-lg text-[10px] font-extrabold">
+											<div class="flex items-center gap-1.5 truncate">
+												<AlertTriangle class="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+												<span>FAILED AT {piece.failure_stage?.toUpperCase() || 'STAGE'}</span>
+											</div>
+											{#if piece.failure_reason}
+												<span class="truncate max-w-[130px] font-medium text-[9.5px] italic text-red-600 dark:text-red-400" title={piece.failure_reason}>"{piece.failure_reason}"</span>
+											{/if}
+										</div>
+									{/if}
+
 									<!-- Thumbnail / Photo -->
 									{#if piece.initial_photo_url}
 										<button 
@@ -1549,16 +1589,27 @@
 												<Copy class="w-3.5 h-3.5" />
 											</button>
 
-											<button 
-												onclick={() => openFailModal(piece)}
-												class="p-1.5 text-stone-500 dark:text-stone-400 hover:text-red-500 rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
-												title="Flag as Failed"
-											>
-												<AlertCircle class="w-3.5 h-3.5" />
-											</button>
+											{#if !piece.is_failed}
+												<button 
+													onclick={() => openFailModal(piece)}
+													class="p-1.5 text-stone-500 dark:text-stone-400 hover:text-red-500 rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
+													title="Flag as Failed"
+												>
+													<AlertCircle class="w-3.5 h-3.5" />
+												</button>
+											{/if}
 										</div>
 
-										{#if piece.stage !== 'done'}
+										{#if piece.is_failed}
+											<button 
+												onclick={() => restoreFailedPiece(piece.id)}
+												class="text-[10px] font-bold text-[#3B7258] dark:text-[#81B29A] hover:text-stone-900 dark:hover:text-white flex items-center gap-1 transition px-2 py-1 rounded bg-[#81B29A]/15 hover:bg-[#81B29A]/25 border border-[#81B29A]/30"
+												title="Restore piece back to active lifecycle"
+											>
+												<RotateCcw class="w-3 h-3" />
+												<span>Restore</span>
+											</button>
+										{:else if piece.stage !== 'done'}
 											<button 
 												onclick={() => advancePieceStage(piece.id)}
 												class="text-[10px] font-bold text-[#3B7258] dark:text-[#81B29A] hover:text-stone-900 dark:hover:text-white flex items-center gap-1 transition px-2 py-1 rounded bg-[#81B29A]/15 hover:bg-[#81B29A]/25 border border-[#81B29A]/30"
@@ -1808,6 +1859,32 @@
 					<X class="w-5 h-5" />
 				</button>
 			</div>
+
+			<!-- Failed Banner (if applicable) -->
+			{#if selectedPiece.is_failed}
+				<div class="p-3 rounded-xl bg-red-100 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-xs flex items-center justify-between text-red-700 dark:text-red-300">
+					<div class="flex items-center gap-2 font-semibold">
+						<AlertTriangle class="w-4.5 h-4.5 text-red-500 flex-shrink-0" />
+						<div>
+							<span class="font-bold uppercase text-[10px] block">Flagged as Failed (Finished Lane):</span>
+							<span class="text-sm font-bold">"{selectedPiece.failure_reason || 'Failure logged'}"</span>
+							{#if selectedPiece.failure_stage}
+								<span class="text-[10px] text-red-600 dark:text-red-400 block font-normal mt-0.5">Failed during: {selectedPiece.failure_stage} stage</span>
+							{/if}
+						</div>
+					</div>
+					<button 
+						onclick={() => {
+							restoreFailedPiece(selectedPiece!.id);
+							selectedPiece = pieces.find(p => p.id === selectedPiece!.id) || null;
+						}}
+						class="px-2.5 py-1 text-xs font-bold bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 border border-stone-300 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg flex items-center gap-1 transition shadow-xs"
+					>
+						<RotateCcw class="w-3.5 h-3.5" />
+						<span>Restore to Active</span>
+					</button>
+				</div>
+			{/if}
 
 			<!-- Piece Dates & Lifecycle Timeline -->
 			<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-stone-100/90 dark:bg-stone-900/60 border border-stone-200 dark:border-stone-800 text-xs">
@@ -2441,25 +2518,25 @@
 			</p>
 
 			<div class="space-y-1.5 text-xs">
-				<label for="fail-reason" class="text-stone-700 dark:text-stone-300 font-semibold">Select or Type Failure Reason</label>
-				<select 
-					id="fail-reason"
-					bind:value={failReason}
-					class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100 mb-2"
-				>
-					<option value="S-crack in foot during drying">S-crack in foot during drying</option>
-					<option value="Handle attachment popped off">Handle attachment popped off</option>
-					<option value="Glaze ran onto kiln shelf">Glaze ran onto kiln shelf</option>
-					<option value="Exploded in bisque firing">Exploded in bisque firing</option>
-					<option value="Shivering / glaze crawling defect">Shivering / glaze crawling defect</option>
-					<option value="Thermal shock / dunting crack">Thermal shock / dunting crack</option>
-				</select>
+				<label for="fail-reason" class="text-stone-700 dark:text-stone-300 font-semibold">Failure Reason</label>
 				<input 
+					id="fail-reason"
 					type="text" 
+					list="fail-reasons-list"
 					bind:value={failReason} 
-					placeholder="Or enter custom failure reason..."
-					class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100"
+					placeholder="Select or enter failure reason..."
+					class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100 focus:outline-none focus:border-[#E07A5F]"
 				/>
+				<datalist id="fail-reasons-list">
+					<option value="S-crack in foot during drying"></option>
+					<option value="Handle attachment popped off"></option>
+					<option value="Glaze ran onto kiln shelf"></option>
+					<option value="Exploded in bisque firing"></option>
+					<option value="Shivering / glaze crawling defect"></option>
+					<option value="Thermal shock / dunting crack"></option>
+					<option value="Warped rim during glaze fire"></option>
+					<option value="Pinholing / blistering in glaze"></option>
+				</datalist>
 			</div>
 
 			<div class="pt-3 border-t border-stone-200 dark:border-stone-800 flex justify-end gap-3 text-xs">
@@ -2581,15 +2658,26 @@
 						/>
 					</div>
 				{:else if splitAction === 'fail'}
-					<div class="p-3 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-900/40 space-y-1.5">
+					<div class="p-3 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-900/40 space-y-1.5 text-xs">
 						<label for="split-fail-reason" class="text-red-700 dark:text-red-300 font-semibold">Failure Reason</label>
 						<input 
 							id="split-fail-reason"
 							type="text" 
+							list="split-fail-reasons-list"
 							bind:value={splitFailReason}
-							placeholder="e.g. S-crack in foot during drying, handle cracked off..."
-							class="w-full bg-white dark:bg-stone-900 border border-red-300 dark:border-red-900/50 rounded-lg p-2 text-stone-900 dark:text-stone-100 focus:outline-none"
+							placeholder="Select or enter failure reason..."
+							class="w-full bg-white dark:bg-stone-900 border border-red-300 dark:border-red-900/50 rounded-lg p-2.5 text-stone-900 dark:text-stone-100 focus:outline-none focus:border-red-500"
 						/>
+						<datalist id="split-fail-reasons-list">
+							<option value="S-crack in foot during drying"></option>
+							<option value="Handle attachment popped off"></option>
+							<option value="Glaze ran onto kiln shelf"></option>
+							<option value="Exploded in bisque firing"></option>
+							<option value="Shivering / glaze crawling defect"></option>
+							<option value="Thermal shock / dunting crack"></option>
+							<option value="Warped rim during glaze fire"></option>
+							<option value="Pinholing / blistering in glaze"></option>
+						</datalist>
 					</div>
 				{/if}
 			</div>
