@@ -34,6 +34,7 @@
 	import Search from 'lucide-svelte/icons/search';
 	import SlidersHorizontal from 'lucide-svelte/icons/sliders-horizontal';
 	import ChevronDown from 'lucide-svelte/icons/chevron-down';
+	import GripVertical from 'lucide-svelte/icons/grip-vertical';
 	import type { CeramicPiece, ClayBody, CeramicStage, PieceStageLog, PieceGlazeLayer, GlazeRecipe, GlazeStyle, GlazeLocation, PyrometricCone, Manufacturer, PieceType, PieceBatch } from '$lib/types/database';
 
 	function formatDateShort(dateVal?: Date | string | null): string {
@@ -432,6 +433,339 @@
 	let toastMessage = $state<string | null>(null);
 	let toastTimeout: ReturnType<typeof setTimeout>;
 
+	// Unified Pointer Drag State
+	let touchDragActive = $state(false);
+	let touchDragGhostX = $state(0);
+	let touchDragGhostY = $state(0);
+	let touchDragLabel = $state('');
+	let touchLongPressTimer: ReturnType<typeof setTimeout> | null = null;
+	let touchStartX = 0;
+	let touchStartY = 0;
+	let pendingPieceId: string | null = null;
+	let pendingBatchKey: string | null = null;
+	let pendingLabel = '';
+	let pendingPointerTarget: HTMLElement | null = null;
+	let pendingPointerId: number | null = null;
+	const TOUCH_HOLD_MS = 450;
+	const MOUSE_HOLD_MS = 50;
+	const TOUCH_MOVE_THRESHOLD = 18;
+	let stageBounds: { id: CeramicStage; rect: DOMRect }[] = [];
+
+	function resetDragState() {
+		if (touchLongPressTimer) {
+			clearTimeout(touchLongPressTimer);
+			touchLongPressTimer = null;
+		}
+		if (pendingPointerTarget && pendingPointerId !== null) {
+			try {
+				if (pendingPointerTarget.hasPointerCapture(pendingPointerId)) {
+					pendingPointerTarget.releasePointerCapture(pendingPointerId);
+				}
+			} catch {}
+		}
+		pendingPointerTarget = null;
+		pendingPointerId = null;
+		pendingPieceId = null;
+		pendingBatchKey = null;
+		touchDragActive = false;
+		draggedPieceId = null;
+		draggedBatchKey = null;
+		dragOverStageId = null;
+		dragOverCardGroupKey = null;
+	}
+
+	function updateStageBounds() {
+		if (typeof document === 'undefined') return;
+		const lanes = document.querySelectorAll('[data-stage-id]');
+		stageBounds = Array.from(lanes).map((el) => ({
+			id: (el as HTMLElement).dataset.stageId as CeramicStage,
+			rect: el.getBoundingClientRect()
+		}));
+	}
+
+	function isInteractiveTarget(target: EventTarget | null): boolean {
+		if (!target || !(target instanceof HTMLElement)) return false;
+		const btn = target.closest('button, input, select, a, [role="button"]');
+		if (!btn) return false;
+		return btn.hasAttribute('data-action-button');
+	}
+
+	function handlePointerDownPiece(e: PointerEvent, pieceId: string, label: string) {
+		if (e.button !== 0 || isInteractiveTarget(e.target)) return;
+		resetDragState();
+		pendingPieceId = pieceId;
+		pendingBatchKey = null;
+		pendingLabel = label;
+		pendingPointerTarget = e.currentTarget as HTMLElement;
+		pendingPointerId = e.pointerId;
+		touchStartX = e.clientX;
+		touchStartY = e.clientY;
+
+		const holdMs = e.pointerType === 'mouse' ? MOUSE_HOLD_MS : TOUCH_HOLD_MS;
+
+		touchLongPressTimer = setTimeout(() => {
+			if (!pendingPieceId) return;
+			updateStageBounds();
+			draggedPieceId = pendingPieceId;
+			draggedBatchKey = null;
+			touchDragActive = true;
+			touchDragGhostX = touchStartX;
+			touchDragGhostY = touchStartY;
+			touchDragLabel = pendingLabel;
+
+			try {
+				if (pendingPointerTarget && pendingPointerId !== null) {
+					pendingPointerTarget.setPointerCapture(pendingPointerId);
+				}
+			} catch {}
+		}, holdMs);
+	}
+
+	function handlePointerDownBatch(e: PointerEvent, batchId: string, stageId: CeramicStage, glazeSig: string, label: string) {
+		if (e.button !== 0 || isInteractiveTarget(e.target)) return;
+		resetDragState();
+		pendingBatchKey = `${batchId}::${stageId}::${glazeSig}`;
+		pendingPieceId = null;
+		pendingLabel = label;
+		pendingPointerTarget = e.currentTarget as HTMLElement;
+		pendingPointerId = e.pointerId;
+		touchStartX = e.clientX;
+		touchStartY = e.clientY;
+
+		const holdMs = e.pointerType === 'mouse' ? MOUSE_HOLD_MS : TOUCH_HOLD_MS;
+
+		touchLongPressTimer = setTimeout(() => {
+			if (!pendingBatchKey) return;
+			updateStageBounds();
+			draggedBatchKey = pendingBatchKey;
+			draggedPieceId = null;
+			touchDragActive = true;
+			touchDragGhostX = touchStartX;
+			touchDragGhostY = touchStartY;
+			touchDragLabel = pendingLabel;
+
+			try {
+				if (pendingPointerTarget && pendingPointerId !== null) {
+					pendingPointerTarget.setPointerCapture(pendingPointerId);
+				}
+			} catch {}
+		}, holdMs);
+	}
+
+	// Global window pointer listeners during drag
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+
+		const onMove = (e: PointerEvent) => {
+			// If hold timer is active and pointer moves past threshold before drag activates, cancel hold (user is scrolling or selecting)
+			if (!touchDragActive && (pendingPieceId || pendingBatchKey)) {
+				const dx = Math.abs(e.clientX - touchStartX);
+				const dy = Math.abs(e.clientY - touchStartY);
+				if (dx > TOUCH_MOVE_THRESHOLD || dy > TOUCH_MOVE_THRESHOLD) {
+					resetDragState();
+				}
+				return;
+			}
+
+			if (!touchDragActive) return;
+
+			if (e.cancelable) e.preventDefault();
+
+			touchDragGhostX = e.clientX;
+			touchDragGhostY = e.clientY;
+
+			// Live DOM element hit-testing under current pointer position
+			const el = document.elementFromPoint(e.clientX, e.clientY);
+			if (el) {
+				const cardEl = el.closest('[data-card-group-key]') as HTMLElement | null;
+				const laneEl = el.closest('[data-stage-id]') as HTMLElement | null;
+
+				const targetCardKey = cardEl?.dataset.cardGroupKey || null;
+
+				// Don't highlight self as merge target
+				let isSelf = false;
+				if (targetCardKey) {
+					if (draggedBatchKey) {
+						const [srcBatchId] = draggedBatchKey.split('::');
+						isSelf = targetCardKey === srcBatchId;
+					} else if (draggedPieceId) {
+						isSelf = targetCardKey === draggedPieceId;
+					}
+				}
+
+				dragOverCardGroupKey = isSelf ? null : targetCardKey;
+				dragOverStageId = laneEl ? (laneEl.dataset.stageId as CeramicStage) : null;
+			} else {
+				dragOverCardGroupKey = null;
+				dragOverStageId = null;
+			}
+		};
+
+		const onUp = (e: PointerEvent) => {
+			if (!touchDragActive) return;
+
+			const targetCardKey = dragOverCardGroupKey;
+			const targetStage = dragOverStageId;
+
+			if (targetCardKey) {
+				try {
+					executeCardMerge(targetCardKey);
+				} catch (err) {
+					console.error('Merge execution failed:', err);
+				}
+			} else if (targetStage) {
+				try {
+					executeStageMove(targetStage);
+				} catch (err) {
+					console.error('Drop execution failed:', err);
+				}
+			}
+
+			resetDragState();
+		};
+
+		const onCancel = () => {
+			resetDragState();
+		};
+
+		const onTouchMove = (e: TouchEvent) => {
+			if (touchDragActive && e.cancelable) {
+				e.preventDefault();
+			}
+		};
+
+		window.addEventListener('pointermove', onMove, { passive: false });
+		window.addEventListener('touchmove', onTouchMove, { passive: false });
+		window.addEventListener('pointerup', onUp);
+		window.addEventListener('pointercancel', onCancel);
+		window.addEventListener('blur', onCancel);
+		window.addEventListener('dragend', onCancel);
+		return () => {
+			window.removeEventListener('pointermove', onMove);
+			window.removeEventListener('touchmove', onTouchMove);
+			window.removeEventListener('pointerup', onUp);
+			window.removeEventListener('pointercancel', onCancel);
+			window.removeEventListener('blur', onCancel);
+			window.removeEventListener('dragend', onCancel);
+		};
+	});
+
+	function executeCardMerge(targetCardKey: string) {
+		let targetGroup: KanbanDisplayGroup | undefined;
+		for (const stage of STAGES) {
+			const groups = getStageCardGroups(stage.id);
+			const match = groups.find(g => (g.isBatch ? g.batchId! : g.primaryPiece.id) === targetCardKey);
+			if (match) {
+				targetGroup = match;
+				break;
+			}
+		}
+		if (!targetGroup) return;
+
+		const targetPiece = targetGroup.primaryPiece;
+		const targetBatchId = targetGroup.isBatch ? targetGroup.batchId : targetPiece.batch_id;
+
+		let sourcePiecesToMerge: CeramicPiece[] = [];
+
+		if (draggedBatchKey) {
+			const [srcBatchId, srcStage] = draggedBatchKey.split('::');
+			if (srcBatchId === targetBatchId) return;
+			sourcePiecesToMerge = pieces.filter(p => p.batch_id === srcBatchId && p.stage === srcStage && !p.is_failed);
+		} else if (draggedPieceId) {
+			if (draggedPieceId === targetPiece.id) return;
+			const srcPiece = pieces.find(p => p.id === draggedPieceId);
+			if (srcPiece) sourcePiecesToMerge = [srcPiece];
+		}
+
+		if (sourcePiecesToMerge.length === 0) return;
+
+		const invalidItems = sourcePiecesToMerge.filter(p => 
+			(p.clay_body_id && targetPiece.clay_body_id ? p.clay_body_id !== targetPiece.clay_body_id : p.clay_body_name !== targetPiece.clay_body_name) ||
+			p.piece_type !== targetPiece.piece_type ||
+			p.stage !== targetPiece.stage
+		);
+
+		if (invalidItems.length > 0) {
+			showToast(`Cannot merge: Items must share the same clay (${targetPiece.clay_body_name}), form type (${targetPiece.piece_type}), and stage!`);
+			return;
+		}
+
+		const effectiveBatchId = targetBatchId || `b-${Date.now()}`;
+		const effectiveBatchTitle = targetGroup.batchTitle || targetPiece.batch?.title || `${targetPiece.title.replace(/\s*#\d+$/, '')} Batch`;
+
+		const batchObj: PieceBatch = targetPiece.batch || {
+			id: effectiveBatchId,
+			user_id: 'user-1',
+			title: effectiveBatchTitle,
+			created_at: new Date(),
+			updated_at: new Date()
+		};
+
+		const sourceSet = new Set(sourcePiecesToMerge.map(p => p.id));
+
+		pieces = pieces.map(p => {
+			if (sourceSet.has(p.id)) {
+				return { ...p, batch_id: effectiveBatchId, batch: batchObj, updated_at: new Date() };
+			}
+			if (p.id === targetPiece.id && !p.batch_id) {
+				return { ...p, batch_id: effectiveBatchId, batch: batchObj, updated_at: new Date() };
+			}
+			return p;
+		});
+
+		showToast(`Merged ${sourcePiecesToMerge.length} piece(s) into batch "${effectiveBatchTitle}"!`);
+	}
+
+	function executeStageMove(targetStage: CeramicStage) {
+		const targetStageObj = STAGES.find(s => s.id === targetStage);
+		const stageName = targetStageObj?.label || targetStage;
+		const now = new Date();
+
+		if (draggedBatchKey) {
+			const [bId, srcStage, glazeSig] = draggedBatchKey.split('::');
+			const isMovingOutFromBacklog = srcStage === 'backlog' && targetStage !== 'backlog';
+
+			pieces = pieces.map(p => {
+				if (p.batch_id === bId && p.stage === srcStage && !p.is_failed) {
+					const pGlazeSig = p.glaze_layers ? p.glaze_layers.map(g => g.glaze_name).sort().join('|') : '';
+					if (pGlazeSig === glazeSig) {
+						return {
+							...p,
+							stage: targetStage,
+							started_at: isMovingOutFromBacklog ? (p.started_at || now) : p.started_at,
+							updated_at: now
+						};
+					}
+				}
+				return p;
+			});
+			showToast(`Moved batch pieces to ${stageName}`);
+		} else if (draggedPieceId) {
+			const piece = pieces.find(p => p.id === draggedPieceId);
+			if (piece && piece.stage !== targetStage) {
+				const isMovingOutFromBacklog = piece.stage === 'backlog' && targetStage !== 'backlog';
+
+				pieces = pieces.map(p => {
+					if (p.id === draggedPieceId) {
+						const isClearingFailed = p.is_failed && targetStage !== 'done';
+						return {
+							...p,
+							stage: targetStage,
+							is_failed: targetStage === 'done' ? p.is_failed : false,
+							failure_stage: isClearingFailed ? null : p.failure_stage,
+							failure_reason: isClearingFailed ? null : p.failure_reason,
+							started_at: isMovingOutFromBacklog ? (p.started_at || now) : p.started_at,
+							updated_at: now
+						};
+					}
+					return p;
+				});
+
+				showToast(`Moved "${piece.title}" to ${stageName}`);
+			}
+		}
+	}
+
 	function showToast(msg: string) {
 		toastMessage = msg;
 		clearTimeout(toastTimeout);
@@ -721,6 +1055,7 @@
 
 	// Job Splitting Modal Trigger & Handlers
 	function openSplitBatchModal(batchId: string, stageFilter?: CeramicStage) {
+		resetDragState();
 		const targetPieces = pieces.filter(p => p.batch_id === batchId && !p.is_failed && (!stageFilter || p.stage === stageFilter));
 		if (targetPieces.length === 0) return;
 		
@@ -751,6 +1086,7 @@
 	}
 
 	function executeSplitBatch() {
+		resetDragState();
 		if (splitSelectedPieceIds.length === 0) {
 			showToast('Please select at least 1 piece to split.');
 			return;
@@ -1830,7 +2166,7 @@
 	</div>
 
 	<!-- MOBILE STAGE SELECTOR TABS (Visible on mobile/tablet `< xl`) -->
-	<div class="flex xl:hidden items-center gap-1.5 overflow-x-auto pb-2 pt-0.5 no-scrollbar flex-shrink-0">
+	<div class="flex items-center gap-1.5 overflow-x-auto touch-pan-x pb-2 pt-0.5 no-scrollbar flex-shrink-0">
 		<button
 			type="button"
 			onclick={() => mobileActiveStage = 'all'}
@@ -1861,8 +2197,8 @@
 	</div>
 
 	<!-- STREAMLINED 6-STAGE RESPONSIVE KANBAN BOARD CONTAINER -->
-	<div class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto xl:overflow-hidden pb-2">
-		<div class="flex-1 min-h-0 flex overflow-x-auto snap-x snap-mandatory gap-3.5 sm:gap-4 xl:grid xl:grid-cols-6 xl:overflow-visible pb-2 xl:pb-0">
+	<div class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto touch-pan-x pb-2">
+		<div class="flex-1 min-h-0 flex overflow-x-auto touch-pan-x snap-x snap-mandatory gap-3.5 pb-2">
 			{#each STAGES as stageInfo}
 				{@const columnPieces = stageInfo.id === 'done'
 					? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done') : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed))
@@ -1871,7 +2207,8 @@
 					<div 
 						role="region"
 						aria-label={stageInfo.label}
-						class="{mobileActiveStage === stageInfo.id ? 'w-full min-w-full' : 'w-[85vw] min-w-[290px] sm:w-[340px] sm:min-w-[320px] xl:w-full xl:min-w-0'} flex-shrink-0 xl:flex-shrink-0 snap-start bg-stone-200/50 dark:bg-stone-900/40 rounded-2xl p-3 sm:p-3.5 border transition-all duration-200 flex flex-col flex-1 min-h-[480px] max-h-[70vh] xl:max-h-none xl:h-full overflow-hidden {stageInfo.color} {dragOverStageId === stageInfo.id ? 'ring-2 ring-[#E07A5F] bg-stone-200/90 dark:bg-stone-900/80 scale-[1.01] shadow-lg shadow-[#E07A5F]/10' : ''}"
+						data-stage-id={stageInfo.id}
+						class="{mobileActiveStage === stageInfo.id ? 'w-full min-w-full' : 'w-[85vw] min-w-[280px] max-w-[340px]'} flex-shrink-0 snap-start bg-stone-200/50 dark:bg-stone-900/40 rounded-2xl p-3 border transition-all duration-200 flex flex-col flex-1 min-h-[480px] max-h-[70vh] overflow-hidden {stageInfo.color} {dragOverStageId === stageInfo.id ? 'ring-2 ring-[#E07A5F] bg-stone-200/90 dark:bg-stone-900/80 scale-[1.01] shadow-lg shadow-[#E07A5F]/10' : ''}"
 						ondragover={(e) => handleDragOver(e, stageInfo.id)}
 						ondragenter={(e) => handleDragOver(e, stageInfo.id)}
 						ondragleave={(e) => handleDragLeave(e, stageInfo.id)}
@@ -1890,7 +2227,7 @@
 					</div>
 
 					<!-- Cards Column -->
-					<div class="space-y-3 flex-1 min-h-0 overflow-y-auto overflow-x-hidden snap-y snap-mandatory scroll-smooth px-1.5 py-1" role="list">
+					<div class="space-y-3 flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden touch-pan-y snap-y snap-mandatory scroll-smooth px-1.5 py-1" role="list">
 						{#each getStageCardGroups(stageInfo.id) as group}
 							{@const groupKey = group.isBatch ? group.batchId! : group.primaryPiece.id}
 							{@const isCardHovered = dragOverCardGroupKey === groupKey}
@@ -1913,11 +2250,11 @@
 									<!-- Front Primary Batch Card (Layer 1: Offset Top-Left) -->
 									<div 
 										role="listitem"
+										data-card-group-key={groupKey}
 										aria-grabbed={draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}`}
-										draggable="true"
-										ondragstart={(e) => handleBatchDragStart(e, group.batchId!, stageInfo.id, group.glazeSignature || '')}
-										ondragend={handleDragEnd}
-										class="relative z-10 -translate-x-2 -translate-y-2 group-hover/stack:-translate-x-2.5 group-hover/stack:-translate-y-2.5 transition-transform duration-300 ceramic-card snap-start p-3.5 rounded-xl border group space-y-3 cursor-grab active:cursor-grabbing shadow-lg {group.primaryPiece.is_failed ? 'border-2 border-red-500 dark:border-red-600 bg-gradient-to-br from-red-50/90 via-white to-red-100/40 dark:from-red-950/50 dark:via-stone-900 dark:to-red-950/40 border-l-4 border-l-red-600 shadow-red-500/10' : 'border-stone-300/90 dark:border-stone-700 bg-gradient-to-br from-stone-50 via-white to-stone-100/90 dark:from-stone-900 dark:via-stone-900 dark:to-stone-950 border-l-4 border-l-[#E07A5F] hover:border-r-[#E07A5F]/50'} {draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}` ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''} {isCardHovered ? 'ring-2 ring-[#E07A5F] border-[#E07A5F] bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20' : ''}"
+										draggable={false}
+										onpointerdown={(e) => handlePointerDownBatch(e, group.batchId!, stageInfo.id, group.glazeSignature || '', group.batchTitle || 'Batch')}
+										class="relative z-10 -translate-x-2 -translate-y-2 group-hover/stack:-translate-x-2.5 group-hover/stack:-translate-y-2.5 transition-transform duration-300 ceramic-card snap-start p-3.5 rounded-xl border group space-y-3 cursor-grab active:cursor-grabbing select-none shadow-lg min-w-0 {group.primaryPiece.is_failed ? 'border-2 border-red-500 dark:border-red-600 bg-gradient-to-br from-red-50/90 via-white to-red-100/40 dark:from-red-950/50 dark:via-stone-900 dark:to-red-950/40 border-l-4 border-l-red-600 shadow-red-500/10' : 'border-stone-300/90 dark:border-stone-700 bg-gradient-to-br from-stone-50 via-white to-stone-100/90 dark:from-stone-900 dark:via-stone-900 dark:to-stone-950 border-l-4 border-l-[#E07A5F] hover:border-r-[#E07A5F]/50'} {draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}` ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''} {isCardHovered ? 'ring-2 ring-[#E07A5F] border-[#E07A5F] bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20' : ''}"
 									>
 										<!-- Merge Hover Highlight Banner -->
 										{#if isCardHovered}
@@ -1927,16 +2264,16 @@
 											</div>
 										{/if}
 
-										<!-- Stacked Visual Indicator Badge -->
-										<div class="flex items-center justify-between">
+										<!-- Stacked Visual Indicator Badge & Drag Handle -->
+										<div class="flex items-center justify-between gap-1">
 											{#if group.primaryPiece.is_failed}
-												<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/20 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-500/40 text-[10px] font-extrabold tracking-wide shadow-2xs">
-													<AlertTriangle class="w-3.5 h-3.5 text-red-500" />
+												<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/20 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-500/40 text-[10px] font-extrabold tracking-wide shadow-2xs truncate">
+													<AlertTriangle class="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
 													<span>{group.pieces.length} PCS FAILED STACK</span>
 												</div>
 											{:else}
-												<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#E07A5F]/20 dark:bg-[#E07A5F]/25 text-[#C85A32] dark:text-[#E07A5F] border border-[#E07A5F]/40 text-[10px] font-extrabold tracking-wide shadow-2xs">
-													<Layers2 class="w-3.5 h-3.5" />
+												<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#E07A5F]/20 dark:bg-[#E07A5F]/25 text-[#C85A32] dark:text-[#E07A5F] border border-[#E07A5F]/40 text-[10px] font-extrabold tracking-wide shadow-2xs truncate">
+													<Layers2 class="w-3.5 h-3.5 flex-shrink-0" />
 													<span>{group.pieces.length} PCS STACK</span>
 												</div>
 											{/if}
@@ -1953,7 +2290,7 @@
 												class="w-full h-28 rounded-lg overflow-hidden relative bg-stone-100 dark:bg-stone-950 border border-stone-200 dark:border-stone-800 text-left cursor-pointer group/photo block"
 												title="Click to view details & photos"
 											>
-												<img src={group.primaryPiece.initial_photo_url} alt={group.batchTitle} class="w-full h-full object-cover group-hover/photo:scale-105 transition duration-300" />
+												<img src={group.primaryPiece.initial_photo_url} alt={group.batchTitle} draggable={false} class="w-full h-full object-cover group-hover/photo:scale-105 transition duration-300 pointer-events-none select-none" />
 												<span class="absolute bottom-2 left-2 text-[10px] font-bold bg-black/75 backdrop-blur-md px-2 py-0.5 rounded text-white border border-white/10 flex items-center gap-1">
 													<Boxes class="w-3 h-3 text-[#E07A5F]" />
 													<span>{group.primaryPiece.piece_type} Stack</span>
@@ -2037,6 +2374,8 @@
 												</button>
 
 												<button 
+													type="button"
+													data-action-button
 													onclick={() => openSplitBatchModal(group.batchId!, stageInfo.id)}
 													class="px-2 py-1 bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-300 font-bold rounded text-[10px] border border-amber-500/30 flex items-center gap-1 transition"
 													title="Split Batch or Glaze Jobs Separately"
@@ -2048,6 +2387,8 @@
 
 											{#if stageInfo.id !== 'done'}
 												<button 
+													type="button"
+													data-action-button
 													onclick={() => advanceBatchGroupStage(group)}
 													class="text-[10px] font-bold text-[#3B7258] dark:text-[#81B29A] hover:text-stone-900 dark:hover:text-white flex items-center gap-1 transition px-2 py-1 rounded bg-[#81B29A]/15 hover:bg-[#81B29A]/25 border border-[#81B29A]/30"
 												>
@@ -2063,14 +2404,14 @@
 								{@const piece = group.primaryPiece}
 								<div 
 									role="listitem"
+									data-card-group-key={groupKey}
 									aria-grabbed={draggedPieceId === piece.id}
-									draggable="true"
-									ondragstart={(e) => handleDragStart(e, piece.id)}
-									ondragend={handleDragEnd}
+									draggable={false}
+									onpointerdown={(e) => handlePointerDownPiece(e, piece.id, piece.title)}
 									ondragover={(e) => handleCardDragOver(e, group)}
 									ondragleave={(e) => handleCardDragLeave(e, group)}
 									ondrop={(e) => handleCardDrop(e, group)}
-									class="ceramic-card snap-start p-3.5 rounded-xl transition group relative space-y-3 cursor-grab active:cursor-grabbing {piece.is_failed ? 'border-2 border-red-500 dark:border-red-600 bg-gradient-to-br from-red-50/90 via-white to-red-100/40 dark:from-red-950/50 dark:via-stone-900 dark:to-red-950/40 shadow-md shadow-red-500/10' : 'border border-stone-200 dark:border-stone-800/90 hover:border-[#E07A5F]/50'} {draggedPieceId === piece.id ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''} {isCardHovered ? 'ring-2 ring-[#E07A5F] border-[#E07A5F] bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20 scale-[1.02]' : ''}"
+									class="ceramic-card snap-start p-3.5 rounded-xl transition group relative space-y-3 cursor-grab active:cursor-grabbing select-none min-w-0 {piece.is_failed ? 'border-2 border-red-500 dark:border-red-600 bg-gradient-to-br from-red-50/90 via-white to-red-100/40 dark:from-red-950/50 dark:via-stone-900 dark:to-red-950/40 shadow-md shadow-red-500/10' : 'border border-stone-200 dark:border-stone-800/90 hover:border-[#E07A5F]/50'} {draggedPieceId === piece.id ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''} {isCardHovered ? 'ring-2 ring-[#E07A5F] border-[#E07A5F] bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20 scale-[1.02]' : ''}"
 								>
 									<!-- Merge Hover Highlight Banner -->
 									{#if isCardHovered}
@@ -2101,7 +2442,7 @@
 											class="w-full h-32 rounded-lg overflow-hidden relative bg-stone-100 dark:bg-stone-950 border border-stone-200 dark:border-stone-800 text-left cursor-pointer group/photo block"
 											title="Click to view details & photos"
 										>
-											<img src={piece.initial_photo_url} alt={piece.title} class="w-full h-full object-cover group-hover/photo:scale-105 transition duration-300" />
+											<img src={piece.initial_photo_url} alt={piece.title} draggable={false} class="w-full h-full object-cover group-hover/photo:scale-105 transition duration-300 pointer-events-none select-none" />
 											<span class="absolute bottom-2 left-2 text-[10px] font-bold bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-white border border-white/10">
 												{piece.piece_type}
 											</span>
@@ -2193,6 +2534,8 @@
 									<div class="pt-3 border-t border-stone-200 dark:border-stone-800/80 flex items-center justify-between text-xs">
 										<div class="flex items-center gap-1.5">
 											<button 
+												type="button"
+												data-action-button
 												onclick={() => selectedPiece = piece}
 												class="p-1.5 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
 												title="Glazes & Photo History"
@@ -2201,6 +2544,8 @@
 											</button>
 
 											<button 
+												type="button"
+												data-action-button
 												onclick={() => openDuplicateModal(piece)}
 												class="p-1.5 text-stone-500 dark:text-stone-400 hover:text-[#E07A5F] rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
 												title="Duplicate Piece"
@@ -2210,6 +2555,8 @@
 
 											{#if !piece.is_failed}
 												<button 
+													type="button"
+													data-action-button
 													onclick={() => openFailModal(piece)}
 													class="p-1.5 text-stone-500 dark:text-stone-400 hover:text-red-500 rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
 													title="Flag as Failed"
@@ -2221,6 +2568,8 @@
 
 										{#if piece.is_failed}
 											<button 
+												type="button"
+												data-action-button
 												onclick={() => restoreFailedPiece(piece.id)}
 												class="text-[10px] font-bold text-[#3B7258] dark:text-[#81B29A] hover:text-stone-900 dark:hover:text-white flex items-center gap-1 transition px-2 py-1 rounded bg-[#81B29A]/15 hover:bg-[#81B29A]/25 border border-[#81B29A]/30"
 												title="Restore piece back to active lifecycle"
@@ -2290,7 +2639,7 @@
 			</div>
 
 			<!-- Drawer Form Controls -->
-			<div class="p-4 space-y-4 flex-1 overflow-y-auto">
+			<div class="p-4 space-y-4 flex-1 overflow-y-auto touch-pan-y">
 				<!-- Search -->
 				<div class="space-y-1.5">
 					<label for="drawer-search-input" class="block text-xs font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">Search Query</label>
@@ -2682,7 +3031,7 @@
 <!-- MODAL 2: PIECE GLAZE TAGGING & PHOTO HISTORY -->
 {#if selectedPiece}
 	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-		<div class="ceramic-card max-w-2xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+		<div class="ceramic-card max-w-2xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto touch-pan-y">
 			<div class="flex items-start justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div>
 					<div class="flex items-center gap-2">
@@ -3044,7 +3393,7 @@
 <!-- MODAL 3: GLAZE LIBRARY MANAGER -->
 {#if showGlazeLibraryModal}
 	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-		<div class="ceramic-card max-w-2xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+		<div class="ceramic-card max-w-2xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto touch-pan-y">
 			<div class="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div class="flex items-center gap-2 text-stone-900 dark:text-white">
 					<Palette class="w-5 h-5 text-[#3B7258] dark:text-[#81B29A]" />
@@ -3152,7 +3501,7 @@
 <!-- MODAL 3.5: CLAY BODY LIBRARY MANAGER -->
 {#if showClayLibraryModal}
 	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-		<div class="ceramic-card max-w-2xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+		<div class="ceramic-card max-w-2xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto touch-pan-y">
 			<div class="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div class="flex items-center gap-2 text-stone-900 dark:text-white">
 					<Package class="w-5 h-5 text-[#E07A5F]" />
@@ -3305,7 +3654,7 @@
 <!-- MODAL 4: FULL PYROMETRIC CONE TEMPERATURE EQUIVALENTS CHART -->
 {#if showPyrometricChartModal}
 	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-		<div class="ceramic-card max-w-3xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+		<div class="ceramic-card max-w-3xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto touch-pan-y">
 			<div class="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div class="flex items-center gap-2 text-stone-900 dark:text-white">
 					<Flame class="w-5 h-5 text-[#C85A32] dark:text-[#F2CC8F]" />
@@ -3328,7 +3677,7 @@
 					<span>Color Fire</span>
 					<span>Firing Category</span>
 				</div>
-				<div class="max-h-96 overflow-y-auto divide-y divide-stone-200 dark:divide-stone-800">
+				<div class="max-h-96 overflow-y-auto touch-pan-y divide-y divide-stone-200 dark:divide-stone-800">
 					{#each PYROMETRIC_CONES as cone}
 						<div class="grid grid-cols-5 px-4 py-2 text-stone-800 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800/40">
 							<span class="font-bold text-[#C85A32] dark:text-[#E07A5F]">{cone.name}</span>
@@ -3405,7 +3754,7 @@
 <!-- MODAL 5.5: DUPLICATE CERAMIC PIECE CONFIRMATION & EDIT -->
 {#if isDuplicateModalOpen && pieceToDuplicate}
 	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-		<div class="ceramic-card max-w-lg w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+		<div class="ceramic-card max-w-lg w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto touch-pan-y">
 			<div class="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div class="flex items-center gap-2">
 					<Copy class="w-5 h-5 text-[#E07A5F]" />
@@ -3591,7 +3940,7 @@
 <!-- MODAL 6: SPLIT BATCH / DIVERGE JOBS -->
 {#if isSplitModalOpen}
 	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-		<div class="ceramic-card max-w-xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+		<div class="ceramic-card max-w-xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto touch-pan-y">
 			<div class="flex items-start justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div>
 					<div class="flex items-center gap-2">
@@ -3620,7 +3969,7 @@
 					</div>
 				</div>
 
-				<div class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-stone-100 dark:bg-stone-950 rounded-xl border border-stone-200 dark:border-stone-800">
+				<div class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto touch-pan-y p-2 bg-stone-100 dark:bg-stone-950 rounded-xl border border-stone-200 dark:border-stone-800">
 					{#each splitBatchPieces as p}
 						<label class="flex items-center gap-2.5 p-2 rounded-lg bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 cursor-pointer hover:border-[#E07A5F] transition text-stone-900 dark:text-stone-100">
 							<input 
@@ -3730,6 +4079,26 @@
 				</button>
 			</div>
 		</div>
+	</div>
+{/if}
+
+<!-- TOUCH DRAG GHOST INDICATOR -->
+{#if touchDragActive}
+	<div class="fixed inset-0 z-[60] pointer-events-none">
+		<div
+			class="absolute pointer-events-none flex items-center gap-2 px-3 py-2 rounded-xl bg-[#E07A5F] text-white text-xs font-bold shadow-2xl border border-[#C85A32] max-w-[200px] truncate"
+			style="left: {touchDragGhostX + 12}px; top: {touchDragGhostY - 24}px; transform: translate(0, -50%);"
+		>
+			<span class="text-sm">🏺</span>
+			<span class="truncate">{touchDragLabel}</span>
+		</div>
+		{#if dragOverStageId}
+			{@const targetStage = STAGES.find(s => s.id === dragOverStageId)}
+			<div class="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-stone-900/90 dark:bg-stone-100/90 text-white dark:text-stone-900 text-sm font-bold shadow-2xl flex items-center gap-2 backdrop-blur-md pointer-events-none">
+				<span>{targetStage?.icon}</span>
+				<span>Drop into {targetStage?.label}</span>
+			</div>
+		{/if}
 	</div>
 {/if}
 

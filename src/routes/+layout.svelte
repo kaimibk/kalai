@@ -57,7 +57,7 @@
 	});
 </script>
 
-<div class="min-h-screen xl:h-screen bg-[#F7F4EF] text-stone-800 dark:bg-[#181616] dark:text-[#F4F1DE] flex flex-col font-sans transition-colors duration-200 selection:bg-[#E07A5F] selection:text-white overflow-y-auto xl:overflow-hidden">
+<div class="min-h-screen xl:h-screen bg-[#F7F4EF] text-stone-800 dark:bg-[#181616] dark:text-[#F4F1DE] flex flex-col font-sans transition-colors duration-200 selection:bg-[#E07A5F] selection:text-white overflow-y-auto touch-pan-y xl:overflow-hidden">
 	<!-- Top Studio Header -->
 	<header class="border-b border-stone-200 dark:border-stone-800/80 bg-white/90 dark:bg-[#1C1918]/90 backdrop-blur-md z-40 transition-colors duration-200 flex-shrink-0 h-16 sm:h-20 sticky top-0 xl:relative">
 		<div class="w-full mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
@@ -143,7 +143,7 @@
 	</header>
 
 	<!-- Main Page Slot -->
-	<main class="flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col min-h-0 overflow-y-auto xl:overflow-hidden">
+	<main class="flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col min-h-0 overflow-y-auto touch-pan-y xl:overflow-hidden">
 		{@render children()}
 	</main>
 
