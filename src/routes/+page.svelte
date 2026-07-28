@@ -394,6 +394,21 @@
 	let pieceToFail = $state<CeramicPiece | null>(null);
 	let failReason = $state('S-crack in foot during drying');
 
+	// Duplicate Confirmation Modal State
+	let isDuplicateModalOpen = $state(false);
+	let pieceToDuplicate = $state<CeramicPiece | null>(null);
+	let duplicateTitle = $state('');
+	let duplicatePieceType = $state('Mug');
+	let duplicateClayBodyId = $state('cb-1');
+	let duplicateStage = $state<CeramicStage>('backlog');
+	let duplicateTargetBisqueCone = $state('Cone 06');
+	let duplicateTargetGlazeCone = $state('Cone 6');
+	let duplicateWeightAmount = $state<number | null>(null);
+	let duplicateWeightUnit = $state<WeightUnit>('g');
+	let duplicateDescription = $state('');
+	let duplicateQuantity = $state(1);
+	let duplicateCopyGlazes = $state(true);
+
 	// Piece Notes Inline Editing State
 	let editingPieceNotes = $state('');
 	let isEditingNotes = $state(false);
@@ -965,25 +980,106 @@
 		});
 	}
 
-	function duplicatePiece(piece: CeramicPiece) {
+	function openDuplicateModal(piece: CeramicPiece) {
+		pieceToDuplicate = piece;
+		duplicateTitle = `${piece.title} (Copy)`;
+		duplicatePieceType = piece.piece_type || 'Mug';
+		duplicateClayBodyId = piece.clay_body_id || 'cb-1';
+		duplicateStage = 'backlog';
+		duplicateTargetBisqueCone = piece.target_bisque_cone || 'Cone 06';
+		duplicateTargetGlazeCone = piece.target_glaze_cone || 'Cone 6';
+		duplicateWeightAmount = piece.weight_grams || null;
+		duplicateWeightUnit = 'g';
+		duplicateDescription = piece.notes || piece.description || '';
+		duplicateQuantity = 1;
+		duplicateCopyGlazes = true;
+		isDuplicateModalOpen = true;
+	}
+
+	function confirmDuplicatePiece(e?: Event) {
+		if (e) e.preventDefault();
+		if (!pieceToDuplicate || !duplicateTitle.trim()) return;
+		const selectedClay = clayBodies.find(c => c.id === duplicateClayBodyId);
 		const now = new Date();
-		const newPiece: CeramicPiece = {
-			...piece,
-			id: `p-${Date.now()}`,
-			title: `${piece.title} (Copy)`,
-			stage: 'backlog',
-			started_at: null,
-			due_date: piece.due_date,
-			is_failed: false,
-			failure_stage: null,
-			failure_reason: null,
-			failed_at: null,
-			created_at: now,
-			updated_at: now,
-			stage_logs: piece.stage_logs ? [...piece.stage_logs] : [],
-			glaze_layers: piece.glaze_layers ? [...piece.glaze_layers] : []
-		};
-		pieces = [newPiece, ...pieces];
+		const isStarting = duplicateStage !== 'backlog';
+		const autoStartedAt = isStarting ? now : null;
+		const calculatedGrams = duplicateWeightAmount && duplicateWeightAmount > 0 
+			? toGrams(duplicateWeightAmount, duplicateWeightUnit) 
+			: null;
+		const qty = Math.max(1, Math.min(50, duplicateQuantity));
+
+		const sourceGlazes = (duplicateCopyGlazes && pieceToDuplicate.glaze_layers)
+			? pieceToDuplicate.glaze_layers.map((g, idx) => ({ ...g, id: `gl-${Date.now()}-${idx}` }))
+			: [];
+
+		if (qty > 1) {
+			const batchId = `b-${Date.now()}`;
+			const bTitle = `${duplicateTitle.trim()} Batch (${qty} pcs)`;
+			const batchObj: PieceBatch = {
+				id: batchId,
+				user_id: 'user-1',
+				title: bTitle,
+				created_at: now,
+				updated_at: now
+			};
+
+			const newBatchPieces: CeramicPiece[] = Array.from({ length: qty }).map((_, idx) => ({
+				id: `p-${Date.now()}-${idx + 1}`,
+				user_id: 'user-1',
+				title: `${duplicateTitle.trim()} #${idx + 1}`,
+				description: duplicateDescription.trim() || null,
+				notes: duplicateDescription.trim() || null,
+				piece_type: duplicatePieceType,
+				clay_body_id: duplicateClayBodyId,
+				clay_body_name: selectedClay ? selectedClay.name : pieceToDuplicate!.clay_body_name,
+				stage: duplicateStage,
+				batch_id: batchId,
+				batch_sequence: idx + 1,
+				batch: batchObj,
+				is_failed: false,
+				target_bisque_cone: duplicateTargetBisqueCone,
+				target_glaze_cone: duplicateTargetGlazeCone,
+				weight_grams: calculatedGrams,
+				initial_photo_url: pieceToDuplicate!.initial_photo_url,
+				started_at: autoStartedAt,
+				due_date: pieceToDuplicate!.due_date,
+				created_at: now,
+				updated_at: now,
+				stage_logs: [],
+				glaze_layers: duplicateCopyGlazes ? [...sourceGlazes] : []
+			}));
+
+			pieces = [...newBatchPieces, ...pieces];
+			showToast(`Created duplicate batch of ${qty} pieces ("${bTitle}")!`);
+		} else {
+			const created: CeramicPiece = {
+				id: `p-${Date.now()}`,
+				user_id: 'user-1',
+				title: duplicateTitle.trim(),
+				description: duplicateDescription.trim() || null,
+				notes: duplicateDescription.trim() || null,
+				piece_type: duplicatePieceType,
+				clay_body_id: duplicateClayBodyId,
+				clay_body_name: selectedClay ? selectedClay.name : pieceToDuplicate.clay_body_name,
+				stage: duplicateStage,
+				is_failed: false,
+				target_bisque_cone: duplicateTargetBisqueCone,
+				target_glaze_cone: duplicateTargetGlazeCone,
+				weight_grams: calculatedGrams,
+				initial_photo_url: pieceToDuplicate.initial_photo_url,
+				started_at: autoStartedAt,
+				due_date: pieceToDuplicate.due_date,
+				created_at: now,
+				updated_at: now,
+				stage_logs: [],
+				glaze_layers: duplicateCopyGlazes ? [...sourceGlazes] : []
+			};
+			pieces = [created, ...pieces];
+			showToast(`Created duplicate piece "${created.title}"!`);
+		}
+
+		isDuplicateModalOpen = false;
+		pieceToDuplicate = null;
 	}
 
 	function openFailModal(piece: CeramicPiece) {
@@ -1582,7 +1678,7 @@
 											</button>
 
 											<button 
-												onclick={() => duplicatePiece(piece)}
+												onclick={() => openDuplicateModal(piece)}
 												class="p-1.5 text-stone-500 dark:text-stone-400 hover:text-[#E07A5F] rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
 												title="Duplicate Piece"
 											>
@@ -2553,6 +2649,192 @@
 					Flag as Failed
 				</button>
 			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- MODAL 5.5: DUPLICATE CERAMIC PIECE CONFIRMATION & EDIT -->
+{#if isDuplicateModalOpen && pieceToDuplicate}
+	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+		<div class="ceramic-card max-w-lg w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+			<div class="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
+				<div class="flex items-center gap-2">
+					<Copy class="w-5 h-5 text-[#E07A5F]" />
+					<div>
+						<h3 class="font-display font-bold text-lg text-stone-900 dark:text-white">Duplicate Ceramic Piece</h3>
+						<p class="text-xs text-stone-500 dark:text-stone-400">Review & edit details before creating copy</p>
+					</div>
+				</div>
+				<button onclick={() => isDuplicateModalOpen = false} class="text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white">
+					<X class="w-5 h-5" />
+				</button>
+			</div>
+
+			<form onsubmit={confirmDuplicatePiece} class="space-y-4 text-xs">
+				<div class="space-y-1.5">
+					<label for="dup-title" class="text-stone-700 dark:text-stone-300 font-semibold">New Piece Title</label>
+					<input 
+						id="dup-title"
+						type="text" 
+						bind:value={duplicateTitle}
+						required
+						placeholder="e.g. Ribbed Matcha Bowl (Copy)"
+						class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100 focus:outline-none focus:border-[#E07A5F] font-semibold"
+					/>
+				</div>
+
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+					<div class="space-y-1.5">
+						<label for="dup-type" class="text-stone-700 dark:text-stone-300 font-semibold">Form / Piece Type</label>
+						<select 
+							id="dup-type"
+							bind:value={duplicatePieceType}
+							class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100"
+						>
+							<option value="Mug">Mug</option>
+							<option value="Bowl">Bowl</option>
+							<option value="Vase">Vase</option>
+							<option value="Plate">Plate</option>
+							<option value="Pitcher">Pitcher</option>
+							<option value="Planter">Planter</option>
+							<option value="Teapot">Teapot</option>
+							<option value="Sculpture">Sculpture</option>
+							<option value="Custom">Custom Form</option>
+						</select>
+					</div>
+
+					<div class="space-y-1.5">
+						<label for="dup-clay" class="text-stone-700 dark:text-stone-300 font-semibold">Clay Body</label>
+						<select 
+							id="dup-clay"
+							bind:value={duplicateClayBodyId}
+							class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100"
+						>
+							{#each clayBodies as cb}
+								<option value={cb.id}>{cb.name} ({cb.manufacturer || 'Studio'})</option>
+							{/each}
+						</select>
+					</div>
+				</div>
+
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+					<div class="space-y-1.5">
+						<label for="dup-stage" class="text-stone-700 dark:text-stone-300 font-semibold">Starting Stage</label>
+						<select 
+							id="dup-stage"
+							bind:value={duplicateStage}
+							class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100"
+						>
+							{#each STAGES as s}
+								<option value={s.id}>{s.icon} {s.label}</option>
+							{/each}
+						</select>
+					</div>
+
+					<div class="space-y-1.5">
+						<label for="dup-quantity" class="text-stone-700 dark:text-stone-300 font-semibold">Quantity to Create</label>
+						<input 
+							id="dup-quantity"
+							type="number" 
+							min="1"
+							max="50"
+							bind:value={duplicateQuantity}
+							class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100"
+						/>
+					</div>
+				</div>
+
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+					<div class="space-y-1.5">
+						<label for="dup-bisque" class="text-stone-700 dark:text-stone-300 font-semibold">Target Bisque Cone</label>
+						<select 
+							id="dup-bisque"
+							bind:value={duplicateTargetBisqueCone}
+							class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100"
+						>
+							{#each PYROMETRIC_CONES as c}
+								<option value={c.name}>{c.name} ({c.temp_c}°C / {c.temp_f}°F)</option>
+							{/each}
+						</select>
+					</div>
+
+					<div class="space-y-1.5">
+						<label for="dup-glaze-cone" class="text-stone-700 dark:text-stone-300 font-semibold">Target Glaze Cone</label>
+						<select 
+							id="dup-glaze-cone"
+							bind:value={duplicateTargetGlazeCone}
+							class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100"
+						>
+							{#each PYROMETRIC_CONES as c}
+								<option value={c.name}>{c.name} ({c.temp_c}°C / {c.temp_f}°F)</option>
+							{/each}
+						</select>
+					</div>
+				</div>
+
+				<div class="space-y-1.5">
+					<label for="dup-weight" class="text-stone-700 dark:text-stone-300 font-semibold">Clay Weight</label>
+					<div class="flex items-center gap-2">
+						<input 
+							id="dup-weight"
+							type="number" 
+							step="any"
+							bind:value={duplicateWeightAmount}
+							placeholder="e.g. 450"
+							class="flex-1 bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100"
+						/>
+						<select 
+							bind:value={duplicateWeightUnit}
+							class="bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100 font-bold"
+						>
+							<option value="g">grams (g)</option>
+							<option value="oz">ounces (oz)</option>
+							<option value="lbs">pounds (lbs)</option>
+						</select>
+					</div>
+				</div>
+
+				<div class="space-y-1.5">
+					<label for="dup-desc" class="text-stone-700 dark:text-stone-300 font-semibold">Description / Artistic Notes</label>
+					<textarea 
+						id="dup-desc"
+						bind:value={duplicateDescription}
+						rows="2"
+						placeholder="Add notes..."
+						class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100"
+					></textarea>
+				</div>
+
+				{#if pieceToDuplicate.glaze_layers && pieceToDuplicate.glaze_layers.length > 0}
+					<div class="flex items-center gap-2 pt-1">
+						<input 
+							id="dup-copy-glazes"
+							type="checkbox"
+							bind:checked={duplicateCopyGlazes}
+							class="w-4 h-4 text-[#E07A5F] rounded border-stone-300 dark:border-stone-700 focus:ring-[#E07A5F]"
+						/>
+						<label for="dup-copy-glazes" class="text-stone-700 dark:text-stone-300 font-medium cursor-pointer">
+							Copy {pieceToDuplicate.glaze_layers.length} tagged glaze layer(s) to new piece
+						</label>
+					</div>
+				{/if}
+
+				<div class="pt-4 border-t border-stone-200 dark:border-stone-800 flex justify-end gap-3">
+					<button 
+						type="button"
+						onclick={() => isDuplicateModalOpen = false}
+						class="px-4 py-2 bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 font-semibold rounded-lg"
+					>
+						Cancel
+					</button>
+					<button 
+						type="submit"
+						class="px-4 py-2 bg-[#E07A5F] hover:bg-[#C85A32] text-white font-bold rounded-lg shadow"
+					>
+						{duplicateQuantity > 1 ? `Create Batch (${duplicateQuantity} pcs)` : 'Create Duplicate Piece'}
+					</button>
+				</div>
+			</form>
 		</div>
 	</div>
 {/if}
