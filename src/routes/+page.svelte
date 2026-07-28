@@ -602,22 +602,22 @@
 		};
 
 		const onUp = (e: PointerEvent) => {
-			if (!touchDragActive) return;
+			if (touchDragActive) {
+				const targetCardKey = dragOverCardGroupKey;
+				const targetStage = dragOverStageId;
 
-			const targetCardKey = dragOverCardGroupKey;
-			const targetStage = dragOverStageId;
-
-			if (targetCardKey) {
-				try {
-					executeCardMerge(targetCardKey);
-				} catch (err) {
-					console.error('Merge execution failed:', err);
-				}
-			} else if (targetStage) {
-				try {
-					executeStageMove(targetStage);
-				} catch (err) {
-					console.error('Drop execution failed:', err);
+				if (targetCardKey) {
+					try {
+						executeCardMerge(targetCardKey);
+					} catch (err) {
+						console.error('Merge execution failed:', err);
+					}
+				} else if (targetStage) {
+					try {
+						executeStageMove(targetStage);
+					} catch (err) {
+						console.error('Drop execution failed:', err);
+					}
 				}
 			}
 
