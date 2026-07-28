@@ -13,10 +13,14 @@
 	import Moon from 'lucide-svelte/icons/moon';
 	import Monitor from 'lucide-svelte/icons/monitor';
 
+	import Maximize2 from 'lucide-svelte/icons/maximize-2';
+	import Minimize2 from 'lucide-svelte/icons/minimize-2';
+
 	let { children } = $props();
 
 	type Theme = 'light' | 'dark' | 'system';
 	let currentTheme = $state<Theme>('dark');
+	let isFullscreen = $state(false);
 
 	function setTheme(theme: Theme) {
 		currentTheme = theme;
@@ -39,6 +43,21 @@
 		}
 	}
 
+	function toggleFullScreen() {
+		isFullscreen = !isFullscreen;
+		if (typeof window === 'undefined') return;
+
+		if (isFullscreen) {
+			if (document.documentElement.requestFullscreen) {
+				document.documentElement.requestFullscreen().catch(() => {});
+			}
+		} else {
+			if (document.fullscreenElement && document.exitFullscreen) {
+				document.exitFullscreen().catch(() => {});
+			}
+		}
+	}
+
 	onMount(() => {
 		const savedTheme = (localStorage.getItem('theme') as Theme) || 'dark';
 		currentTheme = savedTheme;
@@ -51,15 +70,23 @@
 		};
 		mediaQuery.addEventListener('change', handleMediaChange);
 
+		const handleFullscreenChange = () => {
+			if (!document.fullscreenElement) {
+				isFullscreen = false;
+			}
+		};
+		document.addEventListener('fullscreenchange', handleFullscreenChange);
+
 		return () => {
 			mediaQuery.removeEventListener('change', handleMediaChange);
+			document.removeEventListener('fullscreenchange', handleFullscreenChange);
 		};
 	});
 </script>
 
-<div class="min-h-screen xl:h-screen bg-[#F7F4EF] text-stone-800 dark:bg-[#181616] dark:text-[#F4F1DE] flex flex-col font-sans transition-colors duration-200 selection:bg-[#E07A5F] selection:text-white overflow-y-auto xl:overflow-hidden">
+<div class="min-h-screen xl:h-screen bg-[#F7F4EF] text-stone-800 dark:bg-[#181616] dark:text-[#F4F1DE] flex flex-col font-sans transition-colors duration-200 selection:bg-[#E07A5F] selection:text-white overflow-y-auto xl:overflow-hidden relative">
 	<!-- Top Studio Header -->
-	<header class="border-b border-stone-200 dark:border-stone-800/80 bg-white/90 dark:bg-[#1C1918]/90 backdrop-blur-md z-40 transition-colors duration-200 flex-shrink-0 h-16 sm:h-20 sticky top-0 xl:relative">
+	<header class="border-b border-stone-200 dark:border-stone-800/80 bg-white/95 dark:bg-[#1C1918]/95 backdrop-blur-md z-40 transition-all duration-300 ease-in-out flex-shrink-0 h-16 sm:h-20 sticky top-0 xl:relative {isFullscreen ? 'hidden' : 'block'}">
 		<div class="w-full mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
 			<!-- Logo / Title -->
 			<div class="flex items-center gap-3">
@@ -75,8 +102,8 @@
 				</div>
 			</div>
 
-			<!-- Quick Studio Stats & Theme Toggle -->
-			<div class="flex items-center gap-4">
+			<!-- Quick Studio Stats & Controls -->
+			<div class="flex items-center gap-2 sm:gap-3">
 				<div class="hidden lg:flex items-center gap-4 text-xs">
 					<div class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-stone-100 dark:bg-stone-900/60 border border-stone-200 dark:border-stone-800">
 						<Layers class="w-4 h-4 text-[#E07A5F]" />
@@ -138,6 +165,23 @@
 						<span class="hidden sm:inline">System</span>
 					</button>
 				</div>
+
+				<!-- Full Screen Toggle Button (Mobile/Tablet Only: xl:hidden) -->
+				<button
+					type="button"
+					onclick={toggleFullScreen}
+					class="xl:hidden p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border cursor-pointer {isFullscreen ? 'bg-[#E07A5F] text-white border-transparent shadow-sm' : 'bg-stone-100 dark:bg-stone-900 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-800 hover:bg-stone-200 dark:hover:bg-stone-800'}"
+					aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+					title={isFullscreen ? "Exit Full Screen Mode" : "Full Screen Workspace"}
+				>
+					{#if isFullscreen}
+						<Minimize2 class="w-3.5 h-3.5 text-white" />
+						<span class="hidden sm:inline">Exit Full Screen</span>
+					{:else}
+						<Maximize2 class="w-3.5 h-3.5 text-[#E07A5F]" />
+						<span class="hidden sm:inline">Full Screen</span>
+					{/if}
+				</button>
 			</div>
 		</div>
 	</header>
@@ -147,20 +191,34 @@
 		{@render children()}
 	</main>
 
-	<!-- Footer -->
-	<footer class="border-t border-stone-200 dark:border-stone-800/80 bg-stone-100 dark:bg-[#151313] py-2 mt-auto text-center text-xs text-stone-500 transition-colors duration-200 flex-shrink-0">
-		<div class="w-full mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
-			<p>© 2026 kālai Studio. Handcrafted multi-stage ceramic tracking.</p>
-			<div class="flex items-center gap-4 text-stone-500 dark:text-stone-400">
-				<span>Svelte 5</span>
-				<span>•</span>
-				<span>SvelteKit</span>
-				<span>•</span>
-				<span>Tailwind CSS v4</span>
-				<span>•</span>
-				<span>Supabase RLS</span>
-			</div>
+	<!-- Footer or Bottom Exit Full Screen Bar -->
+	{#if isFullscreen}
+		<div class="border-t border-stone-200 dark:border-stone-800/80 bg-stone-100/90 dark:bg-[#151313]/90 backdrop-blur-md py-2.5 text-center flex-shrink-0 flex items-center justify-center z-40">
+			<button
+				type="button"
+				onclick={toggleFullScreen}
+				class="px-4 py-1.5 rounded-full bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 text-xs font-bold shadow-md border border-white/20 dark:border-stone-700 flex items-center gap-2 hover:scale-105 transition cursor-pointer"
+				title="Exit Full Screen Mode"
+			>
+				<Minimize2 class="w-3.5 h-3.5 text-[#E07A5F]" />
+				<span>Exit Full Screen</span>
+			</button>
 		</div>
-	</footer>
+	{:else}
+		<footer class="border-t border-stone-200 dark:border-stone-800/80 bg-stone-100 dark:bg-[#151313] py-2 mt-auto text-center text-xs text-stone-500 transition-all duration-300 ease-in-out flex-shrink-0">
+			<div class="w-full mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+				<p>© 2026 kālai Studio. Handcrafted multi-stage ceramic tracking.</p>
+				<div class="flex items-center gap-4 text-stone-500 dark:text-stone-400">
+					<span>Svelte 5</span>
+					<span>•</span>
+					<span>SvelteKit</span>
+					<span>•</span>
+					<span>Tailwind CSS v4</span>
+					<span>•</span>
+					<span>Supabase RLS</span>
+				</div>
+			</div>
+		</footer>
+	{/if}
 </div>
 
