@@ -65,8 +65,8 @@ export interface PieceBatch {
 	title: string;
 	description?: string | null;
 	parent_batch_id?: string | null;
-	created_at: string;
-	updated_at: string;
+	created_at: Date;
+	updated_at: Date;
 }
 
 export interface CeramicPiece {
@@ -89,7 +89,7 @@ export interface CeramicPiece {
 	is_failed: boolean;
 	failure_stage?: string | null;
 	failure_reason?: string | null;
-	failed_at?: string | null;
+	failed_at?: Date | null;
 
 	// FK to pyrometric_cones
 	target_bisque_cone: string;
@@ -100,11 +100,15 @@ export interface CeramicPiece {
 	width_cm?: number | null;
 	initial_photo_url?: string | null;
 
+	// Date tracking (native Date objects)
+	started_at?: Date | null;
+	due_date?: Date | null;
+
 	// UI Helpers / Joined Data
 	stage_logs?: PieceStageLog[];
 	glaze_layers?: PieceGlazeLayer[];
-	created_at: string;
-	updated_at: string;
+	created_at: Date;
+	updated_at: Date;
 }
 
 export interface PieceStageLog {
@@ -115,7 +119,7 @@ export interface PieceStageLog {
 	photo_url?: string | null;
 	notes?: string | null;
 	weight_grams?: number | null;
-	created_at: string;
+	created_at: Date;
 }
 
 export interface GlazeRecipe {
@@ -145,5 +149,5 @@ export interface PieceGlazeLayer {
 	application_method: GlazeStyle;
 	location?: GlazeLocation;
 	notes?: string | null;
-	created_at: string;
+	created_at: Date;
 }

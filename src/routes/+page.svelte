@@ -28,7 +28,33 @@
 	import FileText from 'lucide-svelte/icons/file-text';
 	import GitFork from 'lucide-svelte/icons/git-fork';
 	import Boxes from 'lucide-svelte/icons/boxes';
+	import Calendar from 'lucide-svelte/icons/calendar';
 	import type { CeramicPiece, ClayBody, CeramicStage, PieceStageLog, PieceGlazeLayer, GlazeRecipe, GlazeStyle, GlazeLocation, PyrometricCone, Manufacturer, PieceType, PieceBatch } from '$lib/types/database';
+
+	function formatDateShort(dateVal?: Date | string | null): string {
+		if (!dateVal) return '';
+		const d = typeof dateVal === 'string' ? new Date(dateVal) : dateVal;
+		if (isNaN(d.getTime())) return '';
+		const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+		return `${monthNames[d.getMonth()]} ${d.getDate()}`;
+	}
+
+	function formatDateInput(d?: Date | null): string {
+		if (!d || isNaN(d.getTime())) return '';
+		const year = d.getFullYear();
+		const month = String(d.getMonth() + 1).padStart(2, '0');
+		const day = String(d.getDate()).padStart(2, '0');
+		return `${year}-${month}-${day}`;
+	}
+
+	function parseDateInput(str?: string | null): Date | null {
+		if (!str || !str.trim()) return null;
+		const parts = str.split('-').map(Number);
+		if (parts.length === 3 && !parts.some(isNaN)) {
+			return new Date(parts[0], parts[1] - 1, parts[2]);
+		}
+		return null;
+	}
 
 	// Full Skutt / Orton Pyrometric Cones Temperature Equivalents Dataset
 	const PYROMETRIC_CONES: PyrometricCone[] = [
@@ -162,8 +188,8 @@
 		user_id: 'user-1',
 		title: '6x Speckled Studio Mugs',
 		description: 'Board of 6 identical thrown mugs',
-		created_at: '2026-07-25',
-		updated_at: '2026-07-25'
+		created_at: new Date('2026-07-25T00:00:00'),
+		updated_at: new Date('2026-07-25T00:00:00')
 	};
 
 	const sampleBatchPieces: CeramicPiece[] = Array.from({ length: 6 }).map((_, i) => ({
@@ -185,10 +211,12 @@
 		height_cm: 9.5,
 		width_cm: 8.5,
 		initial_photo_url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&auto=format&fit=crop&q=80',
-		created_at: '2026-07-25',
-		updated_at: '2026-07-25',
+		started_at: new Date('2026-07-25T00:00:00'),
+		due_date: new Date('2026-08-10T00:00:00'),
+		created_at: new Date('2026-07-25T00:00:00'),
+		updated_at: new Date('2026-07-25T00:00:00'),
 		stage_logs: [
-			{ id: `log-b-${i + 1}`, piece_id: `p-batch-101-${i + 1}`, user_id: 'user-1', stage: 'formed', weight_grams: 480, notes: 'Thrown in batch of 6.', created_at: '2026-07-25' }
+			{ id: `log-b-${i + 1}`, piece_id: `p-batch-101-${i + 1}`, user_id: 'user-1', stage: 'formed', weight_grams: 480, notes: 'Thrown in batch of 6.', created_at: new Date('2026-07-25T00:00:00') }
 		],
 		glaze_layers: []
 	}));
@@ -211,10 +239,12 @@
 			height_cm: 8.5,
 			width_cm: 13.0,
 			initial_photo_url: 'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?w=400&auto=format&fit=crop&q=80',
-			created_at: '2026-07-22',
-			updated_at: '2026-07-23',
+			started_at: new Date('2026-07-22T00:00:00'),
+			due_date: new Date('2026-08-05T00:00:00'),
+			created_at: new Date('2026-07-22T00:00:00'),
+			updated_at: new Date('2026-07-23T00:00:00'),
 			stage_logs: [
-				{ id: 'log-1', piece_id: 'p-101', user_id: 'user-1', stage: 'formed', weight_grams: 550, notes: 'Thrown on wheel with 550g clay. Fluted walls.', created_at: '2026-07-22' }
+				{ id: 'log-1', piece_id: 'p-101', user_id: 'user-1', stage: 'formed', weight_grams: 550, notes: 'Thrown on wheel with 550g clay. Fluted walls.', created_at: new Date('2026-07-22T00:00:00') }
 			],
 			glaze_layers: []
 		},
@@ -234,14 +264,16 @@
 			height_cm: 7.0,
 			width_cm: 8.0,
 			initial_photo_url: 'https://images.unsplash.com/photo-1610701596007-11502861dcfa?w=400&auto=format&fit=crop&q=80',
-			created_at: '2026-07-18',
-			updated_at: '2026-07-24',
+			started_at: new Date('2026-07-18T00:00:00'),
+			due_date: new Date('2026-07-30T00:00:00'),
+			created_at: new Date('2026-07-18T00:00:00'),
+			updated_at: new Date('2026-07-24T00:00:00'),
 			stage_logs: [
-				{ id: 'log-4', piece_id: 'p-102', user_id: 'user-1', stage: 'glazed', notes: 'Bisque fired clean cone 04. Ready for glaze kiln.', created_at: '2026-07-24' }
+				{ id: 'log-4', piece_id: 'p-102', user_id: 'user-1', stage: 'glazed', notes: 'Bisque fired clean cone 04. Ready for glaze kiln.', created_at: new Date('2026-07-24T00:00:00') }
 			],
 			glaze_layers: [
-				{ id: 'gl-1', piece_id: 'p-102', glaze_id: 'glz-1', glaze_name: 'PC-20 Blue Rutile', manufacturer: 'Amaco', layer_order: 1, coat_count: 3, application_method: 'brush', location: 'outside', created_at: '2026-07-24' },
-				{ id: 'gl-2', piece_id: 'p-102', glaze_id: 'glz-3', glaze_name: 'SW-119 Honey Flux', manufacturer: 'Mayco', layer_order: 2, coat_count: 2, application_method: 'brush', location: 'top', created_at: '2026-07-24' }
+				{ id: 'gl-1', piece_id: 'p-102', glaze_id: 'glz-1', glaze_name: 'PC-20 Blue Rutile', manufacturer: 'Amaco', layer_order: 1, coat_count: 3, application_method: 'brush', location: 'outside', created_at: new Date('2026-07-24T00:00:00') },
+				{ id: 'gl-2', piece_id: 'p-102', glaze_id: 'glz-3', glaze_name: 'SW-119 Honey Flux', manufacturer: 'Mayco', layer_order: 2, coat_count: 2, application_method: 'brush', location: 'top', created_at: new Date('2026-07-24T00:00:00') }
 			]
 		},
 		{
@@ -260,8 +292,10 @@
 			height_cm: 24.0,
 			width_cm: 11.0,
 			initial_photo_url: null,
-			created_at: '2026-07-24',
-			updated_at: '2026-07-24',
+			started_at: null,
+			due_date: new Date('2026-08-15T00:00:00'),
+			created_at: new Date('2026-07-24T00:00:00'),
+			updated_at: new Date('2026-07-24T00:00:00'),
 			stage_logs: [],
 			glaze_layers: []
 		}
@@ -286,6 +320,7 @@
 	let newWeightAmount = $state<number | null>(null);
 	let newWeightUnit = $state<WeightUnit>('g');
 	let newInitialPhotoUrl = $state('');
+	let newDueDate = $state('');
 	let newStage = $state<CeramicStage>('backlog');
 	let newQuantity = $state(1);
 	let newBatchTitle = $state('');
@@ -488,8 +523,8 @@
 			id: effectiveBatchId,
 			user_id: 'user-1',
 			title: effectiveBatchTitle,
-			created_at: new Date().toISOString().split('T')[0],
-			updated_at: new Date().toISOString().split('T')[0]
+			created_at: new Date(),
+			updated_at: new Date()
 		};
 
 		const sourceIds = new Set(sourcePiecesToMerge.map(p => p.id));
@@ -500,7 +535,7 @@
 					...p,
 					batch_id: effectiveBatchId,
 					batch: batchObj,
-					updated_at: new Date().toISOString().split('T')[0]
+					updated_at: new Date()
 				};
 			}
 			return p;
@@ -518,9 +553,12 @@
 		e.preventDefault();
 		const targetStageObj = STAGES.find(s => s.id === targetStage);
 		const stageName = targetStageObj?.label || targetStage;
+		const now = new Date();
 
 		if (draggedBatchKey) {
 			const [bId, srcStage, glazeSig] = draggedBatchKey.split('::');
+			const isMovingOutFromBacklog = srcStage === 'backlog' && targetStage !== 'backlog';
+
 			pieces = pieces.map(p => {
 				if (p.batch_id === bId && p.stage === srcStage && !p.is_failed) {
 					const pGlazeSig = p.glaze_layers ? p.glaze_layers.map(g => g.glaze_name).sort().join('|') : '';
@@ -528,7 +566,8 @@
 						return {
 							...p,
 							stage: targetStage,
-							updated_at: new Date().toISOString().split('T')[0]
+							started_at: isMovingOutFromBacklog ? (p.started_at || now) : p.started_at,
+							updated_at: now
 						};
 					}
 				}
@@ -538,12 +577,15 @@
 		} else if (draggedPieceId) {
 			const piece = pieces.find(p => p.id === draggedPieceId);
 			if (piece && piece.stage !== targetStage) {
+				const isMovingOutFromBacklog = piece.stage === 'backlog' && targetStage !== 'backlog';
+
 				pieces = pieces.map(p => {
 					if (p.id === draggedPieceId) {
 						return {
 							...p,
 							stage: targetStage,
-							updated_at: new Date().toISOString().split('T')[0]
+							started_at: isMovingOutFromBacklog ? (p.started_at || now) : p.started_at,
+							updated_at: now
 						};
 					}
 					return p;
@@ -661,7 +703,7 @@
 
 		const selectedSet = new Set(splitSelectedPieceIds);
 		const count = splitSelectedPieceIds.length;
-		const nowStr = new Date().toISOString().split('T')[0];
+		const now = new Date();
 
 		if (splitAction === 'new_batch') {
 			// Sub-batch split
@@ -672,8 +714,8 @@
 				user_id: 'user-1',
 				title: newSubBatchTitle,
 				parent_batch_id: splitTargetBatchId || undefined,
-				created_at: nowStr,
-				updated_at: nowStr
+				created_at: now,
+				updated_at: now
 			};
 
 			pieces = pieces.map(p => {
@@ -682,7 +724,7 @@
 						...p,
 						batch_id: newSubBatchId,
 						batch: subBatchObj,
-						updated_at: nowStr
+						updated_at: now
 					};
 				}
 				return p;
@@ -698,7 +740,7 @@
 						batch_id: null,
 						batch_sequence: null,
 						batch: null,
-						updated_at: nowStr
+						updated_at: now
 					};
 				}
 				return p;
@@ -714,7 +756,7 @@
 						is_failed: true,
 						failure_stage: p.stage,
 						failure_reason: splitFailReason,
-						failed_at: nowStr
+						failed_at: now
 					};
 				}
 				return p;
@@ -731,13 +773,20 @@
 			'backlog', 'formed', 'ready_to_trim', 'bone_dry', 'glazed', 'done'
 		];
 		const pieceIds = new Set(group.pieces.map(p => p.id));
+		const now = new Date();
 		
 		pieces = pieces.map(p => {
 			if (pieceIds.has(p.id)) {
 				const currentIndex = stageOrder.indexOf(p.stage);
 				if (currentIndex >= 0 && currentIndex < stageOrder.length - 1) {
 					const nextStage = stageOrder[currentIndex + 1];
-					return { ...p, stage: nextStage, updated_at: new Date().toISOString().split('T')[0] };
+					const isMovingOutFromBacklog = p.stage === 'backlog' && nextStage !== 'backlog';
+					return {
+						...p,
+						stage: nextStage,
+						started_at: isMovingOutFromBacklog ? (p.started_at || now) : p.started_at,
+						updated_at: now
+					};
 				}
 			}
 			return p;
@@ -755,7 +804,10 @@
 			: null;
 
 		const qty = Math.max(1, Math.min(50, newQuantity));
-		const nowStr = new Date().toISOString().split('T')[0];
+		const now = new Date();
+		const userDueDate = parseDateInput(newDueDate);
+		const isStarting = newStage !== 'backlog';
+		const autoStartedAt = isStarting ? now : null;
 
 		if (qty > 1) {
 			const batchId = `b-${Date.now()}`;
@@ -764,8 +816,8 @@
 				id: batchId,
 				user_id: 'user-1',
 				title: bTitle,
-				created_at: nowStr,
-				updated_at: nowStr
+				created_at: now,
+				updated_at: now
 			};
 
 			const newBatchPieces: CeramicPiece[] = Array.from({ length: qty }).map((_, idx) => ({
@@ -786,8 +838,10 @@
 				target_glaze_cone: newTargetGlazeCone,
 				weight_grams: calculatedGrams,
 				initial_photo_url: newInitialPhotoUrl.trim() || null,
-				created_at: nowStr,
-				updated_at: nowStr,
+				started_at: autoStartedAt,
+				due_date: userDueDate,
+				created_at: now,
+				updated_at: now,
 				stage_logs: [],
 				glaze_layers: []
 			}));
@@ -810,8 +864,10 @@
 				target_glaze_cone: newTargetGlazeCone,
 				weight_grams: calculatedGrams,
 				initial_photo_url: newInitialPhotoUrl.trim() || null,
-				created_at: nowStr,
-				updated_at: nowStr,
+				started_at: autoStartedAt,
+				due_date: userDueDate,
+				created_at: now,
+				updated_at: now,
 				stage_logs: [],
 				glaze_layers: []
 			};
@@ -823,6 +879,7 @@
 		newDescription = '';
 		newWeightAmount = null;
 		newInitialPhotoUrl = '';
+		newDueDate = '';
 		newQuantity = 1;
 		newBatchTitle = '';
 		isNewPieceModalOpen = false;
@@ -853,12 +910,19 @@
 		const stageOrder: CeramicStage[] = [
 			'backlog', 'formed', 'ready_to_trim', 'bone_dry', 'glazed', 'done'
 		];
+		const now = new Date();
 		pieces = pieces.map(p => {
 			if (p.id === pieceId) {
 				const currentIndex = stageOrder.indexOf(p.stage);
 				if (currentIndex >= 0 && currentIndex < stageOrder.length - 1) {
 					const nextStage = stageOrder[currentIndex + 1];
-					return { ...p, stage: nextStage, updated_at: new Date().toISOString().split('T')[0] };
+					const isMovingOutFromBacklog = p.stage === 'backlog' && nextStage !== 'backlog';
+					return {
+						...p,
+						stage: nextStage,
+						started_at: isMovingOutFromBacklog ? (p.started_at || now) : p.started_at,
+						updated_at: now
+					};
 				}
 			}
 			return p;
@@ -866,17 +930,20 @@
 	}
 
 	function duplicatePiece(piece: CeramicPiece) {
+		const now = new Date();
 		const newPiece: CeramicPiece = {
 			...piece,
 			id: `p-${Date.now()}`,
 			title: `${piece.title} (Copy)`,
 			stage: 'backlog',
+			started_at: null,
+			due_date: piece.due_date,
 			is_failed: false,
 			failure_stage: null,
 			failure_reason: null,
 			failed_at: null,
-			created_at: new Date().toISOString().split('T')[0],
-			updated_at: new Date().toISOString().split('T')[0],
+			created_at: now,
+			updated_at: now,
 			stage_logs: piece.stage_logs ? [...piece.stage_logs] : [],
 			glaze_layers: piece.glaze_layers ? [...piece.glaze_layers] : []
 		};
@@ -890,6 +957,7 @@
 
 	function confirmFlagAsFailed() {
 		if (!pieceToFail) return;
+		const now = new Date();
 		pieces = pieces.map(p => {
 			if (p.id === pieceToFail!.id) {
 				return {
@@ -897,7 +965,7 @@
 					is_failed: true,
 					failure_stage: p.stage,
 					failure_reason: failReason,
-					failed_at: new Date().toISOString().split('T')[0]
+					failed_at: now
 				};
 			}
 			return p;
@@ -925,7 +993,7 @@
 			coat_count: tagGlazeCoats,
 			application_method: tagGlazeMethod,
 			location: tagGlazeLocation,
-			created_at: new Date().toISOString()
+			created_at: new Date()
 		};
 
 		const updatedGlazes = [...(selectedPiece.glaze_layers || []), newLayer];
@@ -994,7 +1062,7 @@
 			notes: newLogNote,
 			photo_url: newLogPhoto.trim() || null,
 			weight_grams: calculatedLogGrams,
-			created_at: new Date().toISOString().split('T')[0]
+			created_at: new Date()
 		};
 
 		const updatedLogs = [...(selectedPiece.stage_logs || []), newLog];
@@ -1270,6 +1338,28 @@
 											</div>
 										</div>
 
+										<!-- Batch Dates Bar -->
+										<div class="flex items-center justify-between text-[10px] text-stone-500 dark:text-stone-400 font-medium pt-1 border-t border-stone-200/60 dark:border-stone-800/60">
+											{#if group.primaryPiece.started_at}
+												<span class="flex items-center gap-1 text-[#3B7258] dark:text-[#81B29A]" title={`Started work on ${group.primaryPiece.started_at}`}>
+													<Clock class="w-3 h-3 text-[#3B7258] dark:text-[#81B29A]" />
+													<span>Started {formatDateShort(group.primaryPiece.started_at)}</span>
+												</span>
+											{:else}
+												<span class="flex items-center gap-1 text-stone-400 dark:text-stone-500" title={`Created on ${group.primaryPiece.created_at}`}>
+													<Clock class="w-3 h-3" />
+													<span>Created {formatDateShort(group.primaryPiece.created_at)}</span>
+												</span>
+											{/if}
+
+											{#if group.primaryPiece.due_date}
+												<span class="flex items-center gap-1 font-bold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30" title={`Due date: ${group.primaryPiece.due_date}`}>
+													<Calendar class="w-3 h-3 text-amber-600 dark:text-amber-400" />
+													<span>Due {formatDateShort(group.primaryPiece.due_date)}</span>
+												</span>
+											{/if}
+										</div>
+
 										<!-- Tagged Glazes on Batch -->
 										{#if group.primaryPiece.glaze_layers && group.primaryPiece.glaze_layers.length > 0}
 											<div class="pt-2 border-t border-stone-200 dark:border-stone-800/80 space-y-1">
@@ -1389,6 +1479,28 @@
 										<span class="cone-badge cone-6 text-[9px] px-1.5 py-0.5 flex-shrink-0">
 											{piece.target_glaze_cone}
 										</span>
+									</div>
+
+									<!-- Piece Dates Bar -->
+									<div class="flex items-center justify-between text-[10px] text-stone-500 dark:text-stone-400 font-medium pt-1 border-t border-stone-200/60 dark:border-stone-800/60">
+										{#if piece.started_at}
+											<span class="flex items-center gap-1 text-[#3B7258] dark:text-[#81B29A]" title={`Started work on ${piece.started_at}`}>
+												<Clock class="w-3 h-3 text-[#3B7258] dark:text-[#81B29A]" />
+												<span>Started {formatDateShort(piece.started_at)}</span>
+											</span>
+										{:else}
+											<span class="flex items-center gap-1 text-stone-400 dark:text-stone-500" title={`Created on ${piece.created_at}`}>
+												<Clock class="w-3 h-3" />
+												<span>Created {formatDateShort(piece.created_at)}</span>
+											</span>
+										{/if}
+
+										{#if piece.due_date}
+											<span class="flex items-center gap-1 font-bold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30" title={`Due date: ${piece.due_date}`}>
+												<Calendar class="w-3 h-3 text-amber-600 dark:text-amber-400" />
+												<span>Due {formatDateShort(piece.due_date)}</span>
+											</span>
+										{/if}
 									</div>
 
 									<!-- Tagged Glazes -->
@@ -1617,6 +1729,19 @@
 				</div>
 
 				<div class="space-y-1.5">
+					<label for="piece-due-date" class="text-stone-700 dark:text-stone-300 font-semibold flex items-center gap-1.5">
+						<Calendar class="w-3.5 h-3.5 text-[#E07A5F]" />
+						<span>Target Due Date (Optional)</span>
+					</label>
+					<input 
+						id="piece-due-date"
+						type="date" 
+						bind:value={newDueDate} 
+						class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-xl px-3 py-2 text-stone-900 dark:text-stone-100 text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#E07A5F] focus:border-transparent transition shadow-2xs cursor-pointer scheme-light dark:scheme-dark [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-70 hover:[&::-webkit-calendar-picker-indicator]:opacity-100"
+					/>
+				</div>
+
+				<div class="space-y-1.5">
 					<label for="piece-notes-input" class="text-stone-700 dark:text-stone-300 font-semibold">Notes / Description (Optional)</label>
 					<textarea 
 						id="piece-notes-input"
@@ -1682,6 +1807,45 @@
 				<button onclick={() => selectedPiece = null} class="text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white">
 					<X class="w-5 h-5" />
 				</button>
+			</div>
+
+			<!-- Piece Dates & Lifecycle Timeline -->
+			<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-stone-100/90 dark:bg-stone-900/60 border border-stone-200 dark:border-stone-800 text-xs">
+				<div class="space-y-0.5">
+					<span class="text-[10px] uppercase font-extrabold text-stone-500 dark:text-stone-400 block tracking-wider">Date Created</span>
+					<div class="flex items-center gap-1.5 font-bold text-stone-800 dark:text-stone-200">
+						<Clock class="w-3.5 h-3.5 text-stone-400" />
+						<span>{formatDateShort(selectedPiece.created_at)}</span>
+					</div>
+				</div>
+
+				<div class="space-y-0.5">
+					<span class="text-[10px] uppercase font-extrabold text-stone-500 dark:text-stone-400 block tracking-wider">Date Started</span>
+					<div class="flex items-center gap-1.5 font-bold text-[#3B7258] dark:text-[#81B29A]">
+						<Sparkles class="w-3.5 h-3.5 text-[#3B7258] dark:text-[#81B29A]" />
+						<span>{selectedPiece.started_at ? formatDateShort(selectedPiece.started_at) : 'In Backlog'}</span>
+					</div>
+				</div>
+
+				<div class="space-y-0.5">
+					<span class="text-[10px] uppercase font-extrabold text-stone-500 dark:text-stone-400 block tracking-wider">Target Due Date</span>
+					<div class="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-300">
+						<Calendar class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+						<input
+							type="date"
+							value={formatDateInput(selectedPiece.due_date)}
+							onchange={(e) => {
+								const valStr = (e.target as HTMLInputElement).value;
+								const parsedDate = parseDateInput(valStr);
+								selectedPiece = { ...selectedPiece!, due_date: parsedDate };
+								pieces = pieces.map(p => p.id === selectedPiece!.id ? { ...p, due_date: parsedDate } : p);
+								showToast(parsedDate ? `Updated due date to ${formatDateShort(parsedDate)}` : 'Cleared due date');
+							}}
+							class="bg-white/80 dark:bg-stone-950/80 border border-stone-300 dark:border-stone-700 rounded-lg px-2 py-0.5 text-xs font-bold text-amber-800 dark:text-amber-200 focus:ring-2 focus:ring-[#E07A5F] focus:border-transparent cursor-pointer scheme-light dark:scheme-dark transition [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+							title="Click to set or edit target due date"
+						/>
+					</div>
+				</div>
 			</div>
 
 			<!-- Piece Notes / Description Section -->
@@ -1898,7 +2062,7 @@
 											</span>
 										{/if}
 									</div>
-									<span>{log.created_at}</span>
+									<span>{formatDateShort(log.created_at)}</span>
 								</div>
 								{#if log.notes}
 									<p class="text-stone-700 dark:text-stone-300">{log.notes}</p>
