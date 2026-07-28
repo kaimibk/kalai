@@ -57,18 +57,18 @@
 	});
 </script>
 
-<div class="min-h-screen bg-[#F7F4EF] text-stone-800 dark:bg-[#181616] dark:text-[#F4F1DE] flex flex-col font-sans transition-colors duration-200 selection:bg-[#E07A5F] selection:text-white">
+<div class="min-h-screen xl:h-screen bg-[#F7F4EF] text-stone-800 dark:bg-[#181616] dark:text-[#F4F1DE] flex flex-col font-sans transition-colors duration-200 selection:bg-[#E07A5F] selection:text-white overflow-y-auto xl:overflow-hidden">
 	<!-- Top Studio Header -->
-	<header class="border-b border-stone-200 dark:border-stone-800/80 bg-white/90 dark:bg-[#1C1918]/90 backdrop-blur-md sticky top-0 z-40 transition-colors duration-200">
-		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+	<header class="border-b border-stone-200 dark:border-stone-800/80 bg-white/90 dark:bg-[#1C1918]/90 backdrop-blur-md z-40 transition-colors duration-200 flex-shrink-0 h-16 sm:h-20 sticky top-0 xl:relative">
+		<div class="w-full mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
 			<!-- Logo / Title -->
 			<div class="flex items-center gap-3">
-				<div class="w-11 h-11 rounded-xl bg-gradient-to-br from-[#E07A5F] to-[#C85A32] flex items-center justify-center shadow-lg shadow-[#C85A32]/20 border border-[#E07A5F]/40">
-					<span class="font-display font-extrabold text-2xl tracking-tighter text-white">K</span>
+				<div class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-[#E07A5F] to-[#C85A32] flex items-center justify-center shadow-lg shadow-[#C85A32]/20 border border-[#E07A5F]/40">
+					<span class="font-display font-extrabold text-xl sm:text-2xl tracking-tighter text-white">K</span>
 				</div>
 				<div>
 					<div class="flex items-center gap-2">
-						<h1 class="font-display font-bold text-xl tracking-tight text-stone-900 dark:text-white">kālai</h1>
+						<h1 class="font-display font-bold text-lg sm:text-xl tracking-tight text-stone-900 dark:text-white">kālai</h1>
 						<span class="px-2 py-0.5 text-[10px] font-semibold tracking-wider text-[#C85A32] dark:text-[#E07A5F] bg-[#E07A5F]/10 rounded-md border border-[#E07A5F]/20 uppercase">Studio Board</span>
 					</div>
 					<p class="text-xs text-stone-500 dark:text-stone-400">Ceramic Piece Lifecycle & Kanban Tracker</p>
@@ -82,7 +82,7 @@
 						<Layers class="w-4 h-4 text-[#E07A5F]" />
 						<div>
 							<span class="text-stone-500 dark:text-stone-400">Active Pieces:</span>
-							<span class="font-semibold text-stone-900 dark:text-white ml-1">14 tracked</span>
+							<span class="font-semibold text-[#3B7258] dark:text-[#81B29A] ml-1">14 tracked</span>
 						</div>
 					</div>
 
@@ -143,13 +143,13 @@
 	</header>
 
 	<!-- Main Page Slot -->
-	<main class="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+	<main class="flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col min-h-0 overflow-y-auto xl:overflow-hidden">
 		{@render children()}
 	</main>
 
 	<!-- Footer -->
-	<footer class="border-t border-stone-200 dark:border-stone-800/80 bg-stone-100 dark:bg-[#151313] py-6 mt-12 text-center text-xs text-stone-500 transition-colors duration-200">
-		<div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+	<footer class="border-t border-stone-200 dark:border-stone-800/80 bg-stone-100 dark:bg-[#151313] py-2 mt-auto text-center text-xs text-stone-500 transition-colors duration-200 flex-shrink-0">
+		<div class="w-full mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
 			<p>© 2026 kālai Studio. Handcrafted multi-stage ceramic tracking.</p>
 			<div class="flex items-center gap-4 text-stone-500 dark:text-stone-400">
 				<span>Svelte 5</span>

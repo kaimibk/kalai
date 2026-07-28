@@ -25,7 +25,6 @@
 	import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
 	import Info from 'lucide-svelte/icons/info';
 	import Palette from 'lucide-svelte/icons/palette';
-	import GripVertical from 'lucide-svelte/icons/grip-vertical';
 	import FileText from 'lucide-svelte/icons/file-text';
 	import GitFork from 'lucide-svelte/icons/git-fork';
 	import Boxes from 'lucide-svelte/icons/boxes';
@@ -274,6 +273,7 @@
 	let showPyrometricChartModal = $state(false);
 	let showFailedDrawer = $state(false);
 	let selectedPiece = $state<CeramicPiece | null>(null);
+	let mobileActiveStage = $state<CeramicStage | 'all'>('all');
 
 	// New Piece Modal State (With Multi-Piece Batch Support)
 	let isNewPieceModalOpen = $state(false);
@@ -1025,66 +1025,75 @@
 </script>
 
 <!-- Top Studio Actions & Controls -->
-<div class="space-y-6">
-	<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-stone-200 dark:border-stone-800 pb-5 transition-colors">
+<div class="flex-1 flex flex-col min-h-0 space-y-3 overflow-hidden">
+	<div class="flex items-center justify-between gap-2 border-b border-stone-200 dark:border-stone-800 pb-2.5 transition-colors flex-shrink-0">
 		<div>
-			<div class="flex items-center gap-3">
-				<h2 class="font-display text-2xl font-extrabold text-stone-900 dark:text-white tracking-tight">Studio Board</h2>
-				<span class="px-2.5 py-0.5 text-xs font-semibold text-[#3B7258] dark:text-[#81B29A] bg-[#81B29A]/15 rounded-full border border-[#81B29A]/30">
-					{activePieces.length} Active Pieces
+			<div class="flex items-center gap-2 sm:gap-3">
+				<h2 class="font-display text-lg sm:text-2xl font-extrabold text-stone-900 dark:text-white tracking-tight">Studio Board</h2>
+				<span class="px-2 py-0.5 text-[10px] sm:text-xs font-semibold text-[#3B7258] dark:text-[#81B29A] bg-[#81B29A]/15 rounded-full border border-[#81B29A]/30">
+					{activePieces.length} Active
 				</span>
 			</div>
-			<p class="text-xs text-stone-600 dark:text-stone-400 mt-1">Ceramic tracking tool for studio artists.</p>
+			<p class="text-[10px] sm:text-xs text-stone-600 dark:text-stone-400 hidden sm:block mt-0.5">Ceramic tracking tool for studio artists.</p>
 		</div>
 
-		<div class="flex items-center gap-3">
+		<div class="flex items-center gap-1.5 sm:gap-2.5">
 			<button 
 				onclick={() => showPyrometricChartModal = true}
-				class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 border border-stone-200 dark:border-stone-700 flex items-center gap-2 transition shadow-xs dark:shadow-none"
+				class="px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 border border-stone-200 dark:border-stone-700 flex items-center gap-1.5 transition shadow-xs dark:shadow-none"
+				title="Pyrometric Cone Temp Chart"
 			>
 				<Flame class="w-4 h-4 text-[#C85A32] dark:text-[#F2CC8F]" />
-				<span>Cone Temp Chart</span>
+				<span class="hidden md:inline">Cone Temp Chart</span>
+				<span class="hidden sm:inline md:hidden">Cones</span>
 			</button>
 
 			<button 
 				onclick={() => showGlazeLibraryModal = true}
-				class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 border border-stone-200 dark:border-stone-700 flex items-center gap-2 transition shadow-xs dark:shadow-none"
+				class="px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 border border-stone-200 dark:border-stone-700 flex items-center gap-1.5 transition shadow-xs dark:shadow-none"
+				title="Glaze Library"
 			>
 				<Palette class="w-4 h-4 text-[#3B7258] dark:text-[#81B29A]" />
-				<span>Glaze Library ({glazes.length})</span>
+				<span class="hidden md:inline">Glaze Library ({glazes.length})</span>
+				<span class="hidden sm:inline md:hidden">Glazes ({glazes.length})</span>
 			</button>
 
 			<button 
 				onclick={() => showClayLibraryModal = true}
-				class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 border border-stone-200 dark:border-stone-700 flex items-center gap-2 transition shadow-xs dark:shadow-none"
+				class="px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 border border-stone-200 dark:border-stone-700 flex items-center gap-1.5 transition shadow-xs dark:shadow-none"
+				title="Clay Bodies Library"
 			>
 				<Package class="w-4 h-4 text-[#E07A5F]" />
-				<span>Clay Bodies ({clayBodies.length})</span>
+				<span class="hidden md:inline">Clay Bodies ({clayBodies.length})</span>
+				<span class="hidden sm:inline md:hidden">Clay ({clayBodies.length})</span>
 			</button>
 
 			{#if failedPieces.length > 0}
 				<button 
 					onclick={() => showFailedDrawer = !showFailedDrawer}
-					class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800/40 flex items-center gap-2 transition"
+					class="px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800/40 flex items-center gap-1.5 transition"
+					title="Loss Archive"
 				>
 					<ShieldAlert class="w-4 h-4 text-red-500 dark:text-red-400" />
-					<span>Loss Archive ({failedPieces.length})</span>
+					<span class="hidden md:inline">Loss Archive ({failedPieces.length})</span>
+					<span class="hidden sm:inline md:hidden">Losses ({failedPieces.length})</span>
 				</button>
 			{/if}
 
 			<button 
 				onclick={() => isNewPieceModalOpen = true}
-				class="px-4 py-2 text-xs font-bold rounded-xl bg-[#E07A5F] hover:bg-[#C85A32] text-white flex items-center gap-2 transition shadow-lg shadow-[#C85A32]/25"
+				class="px-2.5 sm:px-4 py-1.5 text-xs font-bold rounded-xl bg-[#E07A5F] hover:bg-[#C85A32] text-white flex items-center gap-1.5 sm:gap-2 transition shadow-lg shadow-[#C85A32]/25 cursor-pointer"
+				title="Create New Piece"
 			>
 				<Plus class="w-4 h-4" />
-				<span>Create Piece</span>
+				<span class="hidden sm:inline">Create Piece</span>
 			</button>
 		</div>
 	</div>
 
 	<!-- FAILED PIECES ARCHIVE DRAWER -->
 	{#if showFailedDrawer}
-		<div class="ceramic-card p-5 rounded-2xl border border-red-300 dark:border-red-900/40 bg-gradient-to-r from-red-50/50 via-stone-100 to-red-50/50 dark:from-red-950/20 dark:via-stone-900 dark:to-red-950/20 space-y-4">
+		<div class="ceramic-card p-4 rounded-2xl border border-red-300 dark:border-red-900/40 bg-gradient-to-r from-red-50/50 via-stone-100 to-red-50/50 dark:from-red-950/20 dark:via-stone-900 dark:to-red-950/20 space-y-3 flex-shrink-0">
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-2 text-red-600 dark:text-red-400 font-display font-bold text-sm">
 					<AlertTriangle class="w-5 h-5" />
@@ -1093,9 +1102,9 @@
 				<button onclick={() => showFailedDrawer = false} class="text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white text-xs">Close</button>
 			</div>
 
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+			<div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
 				{#each failedPieces as fp}
-					<div class="bg-white dark:bg-stone-950/80 p-3.5 rounded-xl border border-red-200 dark:border-red-900/30 space-y-2 shadow-xs dark:shadow-none">
+					<div class="bg-white dark:bg-stone-950/80 p-3 rounded-xl border border-red-200 dark:border-red-900/30 space-y-1.5 shadow-xs dark:shadow-none">
 						<div class="flex items-center justify-between">
 							<span class="font-bold text-stone-900 dark:text-stone-200">{fp.title}</span>
 							<span class="text-[10px] uppercase font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-950 px-2 py-0.5 rounded border border-red-200 dark:border-red-900">
@@ -1103,7 +1112,7 @@
 							</span>
 						</div>
 						<p class="text-stone-600 dark:text-stone-400 text-[11px] font-semibold">Reason: "{fp.failure_reason}"</p>
-						<div class="pt-2 border-t border-stone-200 dark:border-stone-800 flex justify-end">
+						<div class="pt-1.5 border-t border-stone-200 dark:border-stone-800 flex justify-end">
 							<button 
 								onclick={() => restoreFailedPiece(fp.id)}
 								class="text-[11px] text-[#3B7258] dark:text-[#81B29A] hover:underline flex items-center gap-1 font-semibold"
@@ -1118,23 +1127,53 @@
 		</div>
 	{/if}
 
-	<!-- STREAMLINED 6-STAGE HORIZONTAL KANBAN BOARD CONTAINER -->
-	<div class="overflow-x-auto snap-x snap-mandatory scroll-smooth pb-6">
-		<div class="flex gap-4 min-w-[1600px]">
+	<!-- MOBILE STAGE SELECTOR TABS (Visible on mobile/tablet `< xl`) -->
+	<div class="flex xl:hidden items-center gap-1.5 overflow-x-auto pb-2 pt-0.5 no-scrollbar flex-shrink-0">
+		<button
+			type="button"
+			onclick={() => mobileActiveStage = 'all'}
+			class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap border cursor-pointer {mobileActiveStage === 'all' ? 'bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 border-transparent shadow-xs' : 'bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800'}"
+		>
+			<span>All Lanes</span>
+			<span class="px-1.5 py-0.2 rounded-full text-[10px] bg-stone-200 dark:bg-stone-800 text-stone-800 dark:text-stone-200">
+				{activePieces.length}
+			</span>
+		</button>
+
+		{#each STAGES as stageInfo}
+			{@const count = activePieces.filter(p => p.stage === stageInfo.id).length}
+			<button
+				type="button"
+				onclick={() => mobileActiveStage = stageInfo.id}
+				class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap border cursor-pointer {mobileActiveStage === stageInfo.id ? 'bg-[#E07A5F] text-white border-transparent shadow-xs' : 'bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800'}"
+			>
+				<span>{stageInfo.icon}</span>
+				<span>{stageInfo.label}</span>
+				<span class="px-1.5 py-0.2 rounded-full text-[10px] bg-stone-200/80 dark:bg-stone-800/80 text-stone-800 dark:text-stone-200">
+					{count}
+				</span>
+			</button>
+		{/each}
+	</div>
+
+	<!-- STREAMLINED 6-STAGE RESPONSIVE KANBAN BOARD CONTAINER -->
+	<div class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto xl:overflow-hidden pb-2">
+		<div class="flex-1 min-h-0 flex overflow-x-auto snap-x snap-mandatory gap-3.5 sm:gap-4 xl:grid xl:grid-cols-6 xl:overflow-visible pb-2 xl:pb-0">
 			{#each STAGES as stageInfo}
 				{@const columnPieces = activePieces.filter(p => p.stage === stageInfo.id)}
-				<div 
-					role="region"
-					aria-label={stageInfo.label}
-					class="w-[265px] flex-shrink-0 snap-start bg-stone-200/50 dark:bg-stone-900/40 rounded-2xl p-3 border transition-all duration-200 flex flex-col min-h-[620px] {stageInfo.color} {dragOverStageId === stageInfo.id ? 'ring-2 ring-[#E07A5F] bg-stone-200/90 dark:bg-stone-900/80 scale-[1.01] shadow-lg shadow-[#E07A5F]/10' : ''}"
-					ondragover={(e) => handleDragOver(e, stageInfo.id)}
-					ondragenter={(e) => handleDragOver(e, stageInfo.id)}
-					ondragleave={(e) => handleDragLeave(e, stageInfo.id)}
-					ondrop={(e) => handleDrop(e, stageInfo.id)}
-				>
+				{#if mobileActiveStage === 'all' || mobileActiveStage === stageInfo.id}
+					<div 
+						role="region"
+						aria-label={stageInfo.label}
+						class="{mobileActiveStage === stageInfo.id ? 'w-full min-w-full' : 'w-[85vw] min-w-[290px] sm:w-[340px] sm:min-w-[320px] xl:w-full xl:min-w-0'} flex-shrink-0 xl:flex-shrink-0 snap-start bg-stone-200/50 dark:bg-stone-900/40 rounded-2xl p-3 sm:p-3.5 border transition-all duration-200 flex flex-col flex-1 min-h-[480px] max-h-[70vh] xl:max-h-none xl:h-full overflow-hidden {stageInfo.color} {dragOverStageId === stageInfo.id ? 'ring-2 ring-[#E07A5F] bg-stone-200/90 dark:bg-stone-900/80 scale-[1.01] shadow-lg shadow-[#E07A5F]/10' : ''}"
+						ondragover={(e) => handleDragOver(e, stageInfo.id)}
+						ondragenter={(e) => handleDragOver(e, stageInfo.id)}
+						ondragleave={(e) => handleDragLeave(e, stageInfo.id)}
+						ondrop={(e) => handleDrop(e, stageInfo.id)}
+					>
 					
 					<!-- Column Header -->
-					<div class="flex items-center justify-between px-2 py-2 border-b border-stone-300/80 dark:border-stone-800/80 mb-3">
+					<div class="flex items-center justify-between px-2 py-1.5 border-b border-stone-300/80 dark:border-stone-800/80 mb-2.5 flex-shrink-0">
 						<div class="flex items-center gap-2">
 							<span class="text-base">{stageInfo.icon}</span>
 							<h3 class="font-display text-xs font-bold text-stone-800 dark:text-stone-200 tracking-tight">{stageInfo.label}</h3>
@@ -1145,34 +1184,34 @@
 					</div>
 
 					<!-- Cards Column -->
-					<div class="space-y-3 flex-1 overflow-y-auto snap-y snap-mandatory scroll-smooth max-h-[720px] pr-1" role="list">
+					<div class="space-y-3 flex-1 min-h-0 overflow-y-auto overflow-x-hidden snap-y snap-mandatory scroll-smooth px-1.5 py-1" role="list">
 						{#each getStageCardGroups(stageInfo.id) as group}
 							{@const groupKey = group.isBatch ? group.batchId! : group.primaryPiece.id}
 							{@const isCardHovered = dragOverCardGroupKey === groupKey}
 							{#if group.isBatch}
-								<!-- STRAIGHTENED DIAGONAL STACKED CARD CONTAINER -->
+								<!-- SYMMETRICALLY CENTERED DIAGONAL STACKED CARD CONTAINER -->
 								<div 
 									role="region"
 									aria-label="Stacked batch card"
-									class="relative group/stack my-1 mr-2 mb-2 transition-transform duration-200 {isCardHovered ? 'scale-[1.03]' : ''}"
+									class="relative group/stack my-2 mx-auto px-1.5 pt-1.5 pb-2 transition-transform duration-200 {isCardHovered ? 'scale-[1.02]' : ''}"
 									ondragover={(e) => handleCardDragOver(e, group)}
 									ondragleave={(e) => handleCardDragLeave(e, group)}
 									ondrop={(e) => handleCardDrop(e, group)}
 								>
-									<!-- Stack Layer 3 (Deepest diagonal offset card) -->
-									<div class="absolute inset-0 translate-x-3 translate-y-3 bg-stone-300/80 dark:bg-stone-950/80 rounded-xl border border-stone-400/40 dark:border-stone-800 shadow-md transition-transform duration-300 group-hover/stack:translate-x-4 group-hover/stack:translate-y-4 pointer-events-none"></div>
+									<!-- Stack Layer 3 (Back Card: Offset Bottom-Right) -->
+									<div class="absolute inset-x-1.5 inset-y-1.5 translate-x-2 translate-y-2 bg-stone-300/80 dark:bg-stone-950/80 rounded-xl border border-stone-400/40 dark:border-stone-800 shadow-md transition-transform duration-300 group-hover/stack:translate-x-2.5 group-hover/stack:translate-y-2.5 pointer-events-none"></div>
 
-									<!-- Stack Layer 2 (Middle diagonal offset card) -->
-									<div class="absolute inset-0 translate-x-1.5 translate-y-1.5 bg-stone-200/90 dark:bg-stone-900/90 rounded-xl border border-stone-300 dark:border-stone-700 shadow-xs transition-transform duration-300 group-hover/stack:translate-x-2 group-hover/stack:translate-y-2 pointer-events-none"></div>
+									<!-- Stack Layer 2 (Middle Baseline Card: Center Anchor) -->
+									<div class="absolute inset-x-1.5 inset-y-1.5 bg-stone-200/90 dark:bg-stone-900/90 rounded-xl border border-stone-300 dark:border-stone-700 shadow-xs transition-transform duration-300 pointer-events-none"></div>
 
-									<!-- Front Primary Batch Card -->
+									<!-- Front Primary Batch Card (Layer 1: Offset Top-Left) -->
 									<div 
 										role="listitem"
 										aria-grabbed={draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}`}
 										draggable="true"
 										ondragstart={(e) => handleBatchDragStart(e, group.batchId!, stageInfo.id, group.glazeSignature || '')}
 										ondragend={handleDragEnd}
-										class="relative z-10 ceramic-card snap-start p-3.5 rounded-xl border border-stone-300/90 dark:border-stone-700 bg-gradient-to-br from-stone-50 via-white to-stone-100/90 dark:from-stone-900 dark:via-stone-900 dark:to-stone-950 border-l-4 border-l-[#E07A5F] hover:border-r-[#E07A5F]/50 transition group space-y-3 cursor-grab active:cursor-grabbing shadow-lg {draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}` ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''} {isCardHovered ? 'ring-2 ring-[#E07A5F] border-[#E07A5F] bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20' : ''}"
+										class="relative z-10 -translate-x-2 -translate-y-2 group-hover/stack:-translate-x-2.5 group-hover/stack:-translate-y-2.5 transition-transform duration-300 ceramic-card snap-start p-3.5 rounded-xl border border-stone-300/90 dark:border-stone-700 bg-gradient-to-br from-stone-50 via-white to-stone-100/90 dark:from-stone-900 dark:via-stone-900 dark:to-stone-950 border-l-4 border-l-[#E07A5F] hover:border-r-[#E07A5F]/50 group space-y-3 cursor-grab active:cursor-grabbing shadow-lg {draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}` ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''} {isCardHovered ? 'ring-2 ring-[#E07A5F] border-[#E07A5F] bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20' : ''}"
 									>
 										<!-- Merge Hover Highlight Banner -->
 										{#if isCardHovered}
@@ -1195,24 +1234,33 @@
 
 										<!-- Thumbnail / Photo -->
 										{#if group.primaryPiece.initial_photo_url}
-											<div class="w-full h-28 rounded-lg overflow-hidden relative bg-stone-100 dark:bg-stone-950 border border-stone-200 dark:border-stone-800">
-												<img src={group.primaryPiece.initial_photo_url} alt={group.batchTitle} class="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+											<button 
+												type="button"
+												onclick={() => selectedPiece = group.primaryPiece}
+												class="w-full h-28 rounded-lg overflow-hidden relative bg-stone-100 dark:bg-stone-950 border border-stone-200 dark:border-stone-800 text-left cursor-pointer group/photo block"
+												title="Click to view details & photos"
+											>
+												<img src={group.primaryPiece.initial_photo_url} alt={group.batchTitle} class="w-full h-full object-cover group-hover/photo:scale-105 transition duration-300" />
 												<span class="absolute bottom-2 left-2 text-[10px] font-bold bg-black/75 backdrop-blur-md px-2 py-0.5 rounded text-white border border-white/10 flex items-center gap-1">
 													<Boxes class="w-3 h-3 text-[#E07A5F]" />
 													<span>{group.primaryPiece.piece_type} Stack</span>
 												</span>
-											</div>
+											</button>
 										{/if}
 
 										<!-- Batch Card Header & Info -->
 										<div class="space-y-1">
-											<div class="flex items-center gap-1.5">
-												<GripVertical class="w-3.5 h-3.5 text-stone-400 dark:text-stone-600 group-hover:text-stone-600 dark:group-hover:text-stone-400 cursor-grab active:cursor-grabbing flex-shrink-0 transition" />
-												<h4 class="font-display font-extrabold text-sm text-stone-900 dark:text-stone-100 group-hover:text-[#E07A5F] transition leading-snug truncate">
+											<button
+												type="button"
+												onclick={() => selectedPiece = group.primaryPiece}
+												class="text-left w-full hover:underline focus:outline-hidden group/title cursor-pointer block"
+												title="Click to view details"
+											>
+												<h4 class="font-display font-extrabold text-sm text-stone-900 dark:text-stone-100 group-hover/title:text-[#E07A5F] transition leading-snug truncate">
 													{group.batchTitle}
 												</h4>
-											</div>
-											<div class="flex items-center gap-1.5 flex-wrap text-[11px] text-[#3B7258] dark:text-[#81B29A] font-medium ml-5">
+											</button>
+											<div class="flex items-center gap-1.5 flex-wrap text-[11px] text-[#3B7258] dark:text-[#81B29A] font-medium">
 												<span>{group.primaryPiece.clay_body_name}</span>
 												{#if group.primaryPiece.weight_grams}
 													<span class="text-[10px] px-1.5 py-0.2 rounded bg-[#3B7258]/15 text-[#3B7258] dark:text-[#81B29A] font-bold border border-[#3B7258]/20">
@@ -1298,24 +1346,33 @@
 									{/if}
 									<!-- Thumbnail / Photo -->
 									{#if piece.initial_photo_url}
-										<div class="w-full h-32 rounded-lg overflow-hidden relative bg-stone-100 dark:bg-stone-950 border border-stone-200 dark:border-stone-800">
-											<img src={piece.initial_photo_url} alt={piece.title} class="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+										<button 
+											type="button"
+											onclick={() => selectedPiece = piece}
+											class="w-full h-32 rounded-lg overflow-hidden relative bg-stone-100 dark:bg-stone-950 border border-stone-200 dark:border-stone-800 text-left cursor-pointer group/photo block"
+											title="Click to view details & photos"
+										>
+											<img src={piece.initial_photo_url} alt={piece.title} class="w-full h-full object-cover group-hover/photo:scale-105 transition duration-300" />
 											<span class="absolute bottom-2 left-2 text-[10px] font-bold bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-white border border-white/10">
 												{piece.piece_type}
 											</span>
-										</div>
+										</button>
 									{/if}
 
 									<!-- Piece Header & Cone -->
 									<div class="flex items-start justify-between gap-2">
 										<div class="flex-1 min-w-0">
-											<div class="flex items-center gap-1.5">
-												<GripVertical class="w-3.5 h-3.5 text-stone-400 dark:text-stone-600 group-hover:text-stone-600 dark:group-hover:text-stone-400 cursor-grab active:cursor-grabbing flex-shrink-0 transition" />
-												<h4 class="font-display font-bold text-sm text-stone-900 dark:text-stone-100 group-hover:text-[#E07A5F] transition leading-snug truncate">
+											<button
+												type="button"
+												onclick={() => selectedPiece = piece}
+												class="text-left w-full hover:underline focus:outline-hidden group/title cursor-pointer block"
+												title="Click to view details"
+											>
+												<h4 class="font-display font-bold text-sm text-stone-900 dark:text-stone-100 group-hover/title:text-[#E07A5F] transition leading-snug truncate">
 													{piece.title}
 												</h4>
-											</div>
-											<div class="flex items-center gap-1.5 flex-wrap text-[11px] text-[#3B7258] dark:text-[#81B29A] font-medium mt-0.5 ml-5">
+											</button>
+											<div class="flex items-center gap-1.5 flex-wrap text-[11px] text-[#3B7258] dark:text-[#81B29A] font-medium mt-0.5">
 												<span>{piece.clay_body_name}</span>
 												{#if piece.weight_grams}
 													<span class="text-[10px] px-1.5 py-0.2 rounded bg-[#3B7258]/15 text-[#3B7258] dark:text-[#81B29A] font-bold border border-[#3B7258]/20">
@@ -1324,7 +1381,7 @@
 												{/if}
 											</div>
 											{#if piece.notes || piece.description}
-												<p class="text-[10px] text-stone-500 dark:text-stone-400 italic mt-1 ml-5 line-clamp-2">
+												<p class="text-[10px] text-stone-500 dark:text-stone-400 italic mt-1 line-clamp-2">
 													"{piece.notes || piece.description}"
 												</p>
 											{/if}
@@ -1415,6 +1472,7 @@
 						{/if}
 					</div>
 				</div>
+				{/if}
 			{/each}
 		</div>
 	</div>
