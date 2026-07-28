@@ -29,6 +29,11 @@
 	import GitFork from 'lucide-svelte/icons/git-fork';
 	import Boxes from 'lucide-svelte/icons/boxes';
 	import Calendar from 'lucide-svelte/icons/calendar';
+	import Filter from 'lucide-svelte/icons/filter';
+	import FilterX from 'lucide-svelte/icons/filter-x';
+	import Search from 'lucide-svelte/icons/search';
+	import SlidersHorizontal from 'lucide-svelte/icons/sliders-horizontal';
+	import ChevronDown from 'lucide-svelte/icons/chevron-down';
 	import type { CeramicPiece, ClayBody, CeramicStage, PieceStageLog, PieceGlazeLayer, GlazeRecipe, GlazeStyle, GlazeLocation, PyrometricCone, Manufacturer, PieceType, PieceBatch } from '$lib/types/database';
 
 	function formatDateShort(dateVal?: Date | string | null): string {
@@ -657,8 +662,8 @@
 
 	function getStageCardGroups(stageId: CeramicStage): KanbanDisplayGroup[] {
 		const columnPieces = stageId === 'done'
-			? (showLossArchive ? pieces.filter(p => p.stage === 'done') : pieces.filter(p => p.stage === 'done' && !p.is_failed))
-			: pieces.filter(p => p.stage === stageId && !p.is_failed);
+			? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done') : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed))
+			: filteredPieces.filter(p => p.stage === stageId && !p.is_failed);
 		const groups: KanbanDisplayGroup[] = [];
 
 		const batchMap = new Map<string, CeramicPiece[]>();
@@ -936,9 +941,236 @@
 		isNewPieceModalOpen = false;
 	}
 
-	// Derived lists
-	let activePieces = $derived(pieces.filter(p => !p.is_failed));
-	let failedPieces = $derived(pieces.filter(p => p.is_failed));
+	// Dynamic Options for Filtering
+	let availablePieceTypes = $derived(
+		Array.from(new Set([...PIECE_TYPES.map(t => t.name), ...pieces.map(p => p.piece_type)])).sort()
+	);
+
+	let availableClayBodies = $derived(
+		Array.from(new Set([
+			...clayBodies.map(c => c.name),
+			...pieces.map(p => p.clay_body_name).filter(Boolean) as string[]
+		])).sort()
+	);
+
+	let availableGlazes = $derived(
+		Array.from(new Set([
+			...glazes.map(g => g.name),
+			...pieces.flatMap(p => p.glaze_layers?.map(l => l.glaze_name) || []).filter(Boolean) as string[]
+		])).sort()
+	);
+
+	let availableCones = $derived(
+		Array.from(new Set([
+			...pieces.flatMap(p => [p.target_glaze_cone, p.target_bisque_cone]).filter(Boolean) as string[]
+		])).sort()
+	);
+
+	// Applied Weight Filtering State (used for actual Kanban filtering)
+	let appliedWeightUnit = $state<WeightUnit>('g');
+	let appliedMinWeight = $state<number>(0);
+	let appliedMaxWeight = $state<number>(3000);
+	let filterWeightEnabled = $state<boolean>(false);
+
+	// Draft Weight Filtering State (used inside popover / mobile drawer while dragging)
+	let draftWeightUnit = $state<WeightUnit>('g');
+	let draftMinWeight = $state<number>(0);
+	let draftMaxWeight = $state<number>(3000);
+	let showWeightSliderPopover = $state<boolean>(false);
+
+	function openWeightSliderPopover() {
+		draftWeightUnit = appliedWeightUnit;
+		draftMinWeight = appliedMinWeight;
+		draftMaxWeight = appliedMaxWeight;
+		showWeightSliderPopover = true;
+	}
+
+	function applyWeightFilter() {
+		appliedWeightUnit = draftWeightUnit;
+		appliedMinWeight = draftMinWeight;
+		appliedMaxWeight = draftMaxWeight;
+		filterWeightEnabled = true;
+		showWeightSliderPopover = false;
+	}
+
+	function resetWeightFilter() {
+		appliedWeightUnit = 'g';
+		appliedMinWeight = 0;
+		appliedMaxWeight = 3000;
+		draftWeightUnit = 'g';
+		draftMinWeight = 0;
+		draftMaxWeight = 3000;
+		filterWeightEnabled = false;
+		showWeightSliderPopover = false;
+	}
+
+	function fromGrams(grams: number, unit: WeightUnit): number {
+		switch (unit) {
+			case 'kg': return grams / 1000;
+			case 'oz': return grams / 28.3495;
+			case 'lbs': return grams / 453.592;
+			case 'g': default: return grams;
+		}
+	}
+
+	let weightSliderStep = $derived(
+		draftWeightUnit === 'kg' ? 0.05 : draftWeightUnit === 'lbs' ? 0.1 : draftWeightUnit === 'oz' ? 1 : 25
+	);
+
+	let weightSliderMax = $derived(
+		draftWeightUnit === 'kg' ? 5 : draftWeightUnit === 'lbs' ? 10 : draftWeightUnit === 'oz' ? 150 : 3000
+	);
+
+	function handleWeightUnitChange(newUnit: WeightUnit) {
+		if (newUnit === draftWeightUnit) return;
+		const minGrams = toGrams(draftMinWeight, draftWeightUnit);
+		const maxGrams = toGrams(draftMaxWeight, draftWeightUnit);
+		draftWeightUnit = newUnit;
+		draftMinWeight = Math.round(fromGrams(minGrams, newUnit) * 10) / 10;
+		draftMaxWeight = Math.round(fromGrams(maxGrams, newUnit) * 10) / 10;
+	}
+
+	// Filtering State
+	let filterFormType = $state<string>('all');
+	let filterClayBody = $state<string>('all');
+	let filterGlaze = $state<string>('all');
+	let filterTargetCone = $state<string>('all');
+	let filterDueDate = $state<string>('all');
+	let filterSearchQuery = $state<string>('');
+	let isMobileFilterDrawerOpen = $state<boolean>(false);
+
+	// Derived Filtered Lists
+	let filteredPieces = $derived(
+		pieces.filter(p => {
+			// Form Type Filter
+			if (filterFormType !== 'all' && p.piece_type !== filterFormType) {
+				return false;
+			}
+
+			// Clay Body Filter
+			if (filterClayBody !== 'all') {
+				const matchesId = p.clay_body_id === filterClayBody;
+				const matchesName = p.clay_body_name === filterClayBody;
+				if (!matchesId && !matchesName) return false;
+			}
+
+			// Glaze Filter
+			if (filterGlaze !== 'all') {
+				if (filterGlaze === 'unglazed') {
+					if (p.glaze_layers && p.glaze_layers.length > 0) return false;
+				} else {
+					const hasGlaze = p.glaze_layers?.some(g => g.glaze_id === filterGlaze || g.glaze_name === filterGlaze);
+					if (!hasGlaze) return false;
+				}
+			}
+
+			// Target Cone Filter
+			if (filterTargetCone !== 'all' && p.target_glaze_cone !== filterTargetCone && p.target_bisque_cone !== filterTargetCone) {
+				return false;
+			}
+
+			// Due Date Filter
+			if (filterDueDate !== 'all') {
+				if (filterDueDate === 'no_due_date') {
+					if (p.due_date) return false;
+				} else if (!p.due_date) {
+					return false;
+				} else {
+					const due = typeof p.due_date === 'string' ? new Date(p.due_date) : p.due_date;
+					if (isNaN(due.getTime())) return false;
+
+					const now = new Date();
+					const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+					const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+					const diffDays = Math.ceil((dueDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+					if (filterDueDate === 'overdue') {
+						if (diffDays >= 0) return false;
+					} else if (filterDueDate === 'due_today') {
+						if (diffDays !== 0) return false;
+					} else if (filterDueDate === 'less_than_1_week') {
+						if (diffDays < 0 || diffDays > 7) return false;
+					} else if (filterDueDate === 'less_than_2_weeks') {
+						if (diffDays < 0 || diffDays > 14) return false;
+					} else if (filterDueDate === 'has_due_date') {
+						// Checked above
+					}
+				}
+			}
+
+			// Weight Range Filter (ONLY filters by applied values after clicking Apply)
+			if (filterWeightEnabled) {
+				if (!p.weight_grams || p.weight_grams <= 0) {
+					return false;
+				}
+				const pieceGrams = p.weight_grams;
+				const minGrams = toGrams(appliedMinWeight, appliedWeightUnit);
+				const maxGrams = toGrams(appliedMaxWeight, appliedWeightUnit);
+				if (pieceGrams < minGrams || pieceGrams > maxGrams) {
+					return false;
+				}
+			}
+
+			// Search Query Filter
+			if (filterSearchQuery.trim() !== '') {
+				const q = filterSearchQuery.toLowerCase().trim();
+				const matchTitle = p.title.toLowerCase().includes(q);
+				const matchDesc = p.description?.toLowerCase().includes(q) ?? false;
+				const matchNotes = p.notes?.toLowerCase().includes(q) ?? false;
+				const matchBatch = p.batch?.title?.toLowerCase().includes(q) ?? false;
+				const matchClay = p.clay_body_name?.toLowerCase().includes(q) ?? false;
+				const matchType = p.piece_type.toLowerCase().includes(q);
+				if (!matchTitle && !matchDesc && !matchNotes && !matchBatch && !matchClay && !matchType) {
+					return false;
+				}
+			}
+
+			return true;
+		})
+	);
+
+	let activePieces = $derived(filteredPieces.filter(p => !p.is_failed));
+	let failedPieces = $derived(filteredPieces.filter(p => p.is_failed));
+
+	let hasActiveFilters = $derived(
+		filterFormType !== 'all' ||
+		filterClayBody !== 'all' ||
+		filterGlaze !== 'all' ||
+		filterTargetCone !== 'all' ||
+		filterDueDate !== 'all' ||
+		filterWeightEnabled ||
+		filterSearchQuery.trim() !== ''
+	);
+
+	let activeFilterCount = $derived(
+		(filterFormType !== 'all' ? 1 : 0) +
+		(filterClayBody !== 'all' ? 1 : 0) +
+		(filterGlaze !== 'all' ? 1 : 0) +
+		(filterTargetCone !== 'all' ? 1 : 0) +
+		(filterDueDate !== 'all' ? 1 : 0) +
+		(filterWeightEnabled ? 1 : 0) +
+		(filterSearchQuery.trim() !== '' ? 1 : 0)
+	);
+
+	function clearAllFilters() {
+		filterFormType = 'all';
+		filterClayBody = 'all';
+		filterGlaze = 'all';
+		filterTargetCone = 'all';
+		filterDueDate = 'all';
+		resetWeightFilter();
+		filterSearchQuery = '';
+	}
+
+	function resetSingleFilter(field: 'formType' | 'clayBody' | 'glaze' | 'targetCone' | 'dueDate' | 'weight' | 'search') {
+		if (field === 'formType') filterFormType = 'all';
+		else if (field === 'clayBody') filterClayBody = 'all';
+		else if (field === 'glaze') filterGlaze = 'all';
+		else if (field === 'targetCone') filterTargetCone = 'all';
+		else if (field === 'dueDate') filterDueDate = 'all';
+		else if (field === 'weight') resetWeightFilter();
+		else if (field === 'search') filterSearchQuery = '';
+	}
 
 	function handleGlazeSelectionChange(e: Event) {
 		const val = (e.target as HTMLSelectElement).value;
@@ -1306,6 +1538,297 @@
 		</div>
 	</div>
 
+	<!-- DYNAMIC RESPONSIVE FILTER TOOLBAR -->
+	<div class="w-full bg-white/70 dark:bg-stone-900/70 backdrop-blur-md border border-stone-200 dark:border-stone-800 rounded-2xl p-2.5 sm:p-3 mb-3 shadow-xs space-y-2 flex-shrink-0 relative z-30">
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<!-- Search Bar -->
+			<div class="relative flex-1 min-w-[200px] sm:min-w-[260px]">
+				<Search class="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+				<input
+					type="text"
+					bind:value={filterSearchQuery}
+					placeholder="Search titles, clay, forms, glazes, notes..."
+					class="w-full pl-9 pr-8 py-1.5 text-xs font-medium bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 placeholder-stone-400 dark:placeholder-stone-500 rounded-xl border border-transparent focus:border-[#E07A5F] focus:bg-white dark:focus:bg-stone-900 focus:outline-hidden transition shadow-xs"
+				/>
+				{#if filterSearchQuery}
+					<button
+						type="button"
+						onclick={() => filterSearchQuery = ''}
+						class="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 p-0.5 rounded-full cursor-pointer"
+						aria-label="Clear search"
+					>
+						<X class="w-3.5 h-3.5" />
+					</button>
+				{/if}
+			</div>
+
+			<!-- Mobile Filter Drawer Toggle Button (Visible on `< lg`) -->
+			<button
+				type="button"
+				onclick={() => isMobileFilterDrawerOpen = true}
+				class="lg:hidden px-3 py-1.5 text-xs font-bold rounded-xl border transition flex items-center gap-1.5 cursor-pointer {hasActiveFilters ? 'bg-[#E07A5F] text-white border-[#E07A5F] shadow-sm' : 'bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-700'}"
+			>
+				<SlidersHorizontal class="w-4 h-4" />
+				<span>Filter</span>
+				{#if activeFilterCount > 0}
+					<span class="ml-0.5 px-1.5 py-0.2 text-[10px] font-extrabold rounded-full bg-white/25 text-white border border-white/30">
+						{activeFilterCount}
+					</span>
+				{/if}
+			</button>
+
+			<!-- Desktop Filter Dropdowns (Visible on `lg`+) -->
+			<div class="hidden lg:flex items-center gap-2 flex-wrap">
+				<!-- Form Type Filter -->
+				<div class="relative">
+					<select
+						bind:value={filterFormType}
+						class="appearance-none pl-3 pr-7 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 focus:outline-hidden focus:ring-2 focus:ring-[#E07A5F]/40 cursor-pointer shadow-xs"
+					>
+						<option value="all">All Forms</option>
+						{#each availablePieceTypes as typeName}
+							<option value={typeName}>{typeName}</option>
+						{/each}
+					</select>
+					<ChevronDown class="w-3.5 h-3.5 text-stone-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+				</div>
+
+				<!-- Clay Body Filter -->
+				<div class="relative">
+					<select
+						bind:value={filterClayBody}
+						class="appearance-none pl-3 pr-7 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 focus:outline-hidden focus:ring-2 focus:ring-[#E07A5F]/40 cursor-pointer shadow-xs"
+					>
+						<option value="all">All Clay Bodies</option>
+						{#each availableClayBodies as clayName}
+							<option value={clayName}>{clayName}</option>
+						{/each}
+					</select>
+					<ChevronDown class="w-3.5 h-3.5 text-stone-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+				</div>
+
+				<!-- Glaze Filter -->
+				<div class="relative">
+					<select
+						bind:value={filterGlaze}
+						class="appearance-none pl-3 pr-7 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 focus:outline-hidden focus:ring-2 focus:ring-[#E07A5F]/40 cursor-pointer shadow-xs"
+					>
+						<option value="all">All Glazes</option>
+						<option value="unglazed">Unglazed Only</option>
+						{#each availableGlazes as glazeName}
+							<option value={glazeName}>{glazeName}</option>
+						{/each}
+					</select>
+					<ChevronDown class="w-3.5 h-3.5 text-stone-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+				</div>
+
+				<!-- Target Cone Filter -->
+				<div class="relative">
+					<select
+						bind:value={filterTargetCone}
+						class="appearance-none pl-3 pr-7 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 focus:outline-hidden focus:ring-2 focus:ring-[#E07A5F]/40 cursor-pointer shadow-xs"
+					>
+						<option value="all">All Cones</option>
+						{#each availableCones as coneName}
+							<option value={coneName}>{coneName}</option>
+						{/each}
+					</select>
+					<ChevronDown class="w-3.5 h-3.5 text-stone-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+				</div>
+
+				<!-- Due Date Filter -->
+				<div class="relative">
+					<select
+						bind:value={filterDueDate}
+						class="appearance-none pl-3 pr-7 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 focus:outline-hidden focus:ring-2 focus:ring-[#E07A5F]/40 cursor-pointer shadow-xs"
+					>
+						<option value="all">All Due Dates</option>
+						<option value="overdue">Late / Overdue</option>
+						<option value="due_today">Due Today</option>
+						<option value="less_than_1_week">Due in &lt; 1 Week</option>
+						<option value="less_than_2_weeks">Due in &lt; 2 Weeks</option>
+						<option value="has_due_date">Has Due Date</option>
+						<option value="no_due_date">No Due Date</option>
+					</select>
+					<ChevronDown class="w-3.5 h-3.5 text-stone-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+				</div>
+
+				<!-- Weight Range Filter Popover -->
+				<div class="relative flex-shrink-0">
+					<button
+						type="button"
+						onclick={() => { if (showWeightSliderPopover) showWeightSliderPopover = false; else openWeightSliderPopover(); }}
+						class="px-3 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap {filterWeightEnabled ? 'border-[#E07A5F] ring-1 ring-[#E07A5F]/50 text-[#C85A32] dark:text-[#E07A5F]' : ''}"
+					>
+						<span>Weight</span>
+						{#if filterWeightEnabled}
+							<span class="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-[#E07A5F]/20 text-[#C85A32] dark:text-[#E07A5F]">
+								{appliedMinWeight}–{appliedMaxWeight}{appliedWeightUnit}
+							</span>
+						{:else}
+							<span class="text-stone-400 font-normal">All</span>
+						{/if}
+						<ChevronDown class="w-3.5 h-3.5 text-stone-400" />
+					</button>
+
+					{#if showWeightSliderPopover}
+						<!-- Click outside backdrop -->
+						<button
+							type="button"
+							tabindex="-1"
+							aria-label="Close weight filter popover backdrop"
+							onclick={() => showWeightSliderPopover = false}
+							class="fixed inset-0 z-40 bg-transparent cursor-default"
+						></button>
+
+						<div class="absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-2rem)] p-3.5 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-2xl z-50 space-y-3">
+							<div class="flex items-center justify-between">
+								<span class="text-xs font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300">Weight Range</span>
+								<!-- Unit Selector -->
+								<div class="flex items-center p-0.5 bg-stone-100 dark:bg-stone-800 rounded-lg text-[10px] font-bold">
+									{#each (['g', 'kg', 'oz', 'lbs'] as WeightUnit[]) as u}
+										<button
+											type="button"
+											onclick={() => handleWeightUnitChange(u)}
+											class="px-2 py-0.5 rounded-md transition cursor-pointer {draftWeightUnit === u ? 'bg-white dark:bg-stone-700 text-[#E07A5F] shadow-xs font-bold' : 'text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'}"
+										>
+											{u}
+										</button>
+									{/each}
+								</div>
+							</div>
+
+							<!-- Min Weight Slider -->
+							<div class="space-y-1">
+								<div class="flex items-center justify-between text-xs text-stone-600 dark:text-stone-400">
+									<span>Min Weight:</span>
+									<span class="font-bold text-stone-900 dark:text-stone-100">{draftMinWeight} {draftWeightUnit}</span>
+								</div>
+								<input
+									type="range"
+									min="0"
+									max={weightSliderMax}
+									step={weightSliderStep}
+									bind:value={draftMinWeight}
+									class="w-full accent-[#E07A5F] cursor-pointer"
+								/>
+							</div>
+
+							<!-- Max Weight Slider -->
+							<div class="space-y-1">
+								<div class="flex items-center justify-between text-xs text-stone-600 dark:text-stone-400">
+									<span>Max Weight:</span>
+									<span class="font-bold text-stone-900 dark:text-stone-100">{draftMaxWeight} {draftWeightUnit}</span>
+								</div>
+								<input
+									type="range"
+									min="0"
+									max={weightSliderMax}
+									step={weightSliderStep}
+									bind:value={draftMaxWeight}
+									class="w-full accent-[#E07A5F] cursor-pointer"
+								/>
+							</div>
+
+							<!-- Popover Footer -->
+							<div class="flex items-center justify-between pt-2 border-t border-stone-200 dark:border-stone-800">
+								<button
+									type="button"
+									onclick={resetWeightFilter}
+									class="text-xs font-semibold text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 cursor-pointer"
+								>
+									Reset Weight
+								</button>
+								<button
+									type="button"
+									onclick={applyWeightFilter}
+									class="px-3.5 py-1 text-xs font-bold bg-[#E07A5F] text-white rounded-lg hover:bg-[#C85A32] transition cursor-pointer shadow-xs"
+								>
+									Apply Range
+								</button>
+							</div>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Clear All Button (Desktop Toolbar: Opacity transition prevents layout shift) -->
+				<button
+					type="button"
+					onclick={clearAllFilters}
+					class="px-2.5 py-1.5 text-xs font-semibold rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-800/40 flex items-center gap-1 transition-all duration-200 cursor-pointer {hasActiveFilters ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}"
+					title="Clear all active filters"
+				>
+					<RotateCcw class="w-3.5 h-3.5" />
+					<span>Clear Filters</span>
+				</button>
+			</div>
+		</div>
+
+		<!-- ACTIVE FILTER CHIPS / TAGS BAR -->
+		{#if hasActiveFilters}
+			<div class="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-stone-200/60 dark:border-stone-800/60 text-xs">
+				<span class="text-[11px] font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500 mr-1">Active:</span>
+				
+				{#if filterSearchQuery.trim()}
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20 text-[#C85A32] dark:text-[#E07A5F] border border-[#E07A5F]/30">
+						<span>Search: "{filterSearchQuery}"</span>
+						<button type="button" onclick={() => resetSingleFilter('search')} class="hover:text-stone-900 dark:hover:text-white p-0.5 cursor-pointer" aria-label="Remove search filter"><X class="w-3 h-3" /></button>
+					</span>
+				{/if}
+
+				{#if filterFormType !== 'all'}
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+						<span>Form: {filterFormType}</span>
+						<button type="button" onclick={() => resetSingleFilter('formType')} class="hover:text-stone-900 dark:hover:text-white p-0.5 cursor-pointer" aria-label="Remove form type filter"><X class="w-3 h-3" /></button>
+					</span>
+				{/if}
+
+				{#if filterClayBody !== 'all'}
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+						<span>Clay: {filterClayBody}</span>
+						<button type="button" onclick={() => resetSingleFilter('clayBody')} class="hover:text-stone-900 dark:hover:text-white p-0.5 cursor-pointer" aria-label="Remove clay body filter"><X class="w-3 h-3" /></button>
+					</span>
+				{/if}
+
+				{#if filterGlaze !== 'all'}
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+						<span>Glaze: {filterGlaze === 'unglazed' ? 'Unglazed' : filterGlaze}</span>
+						<button type="button" onclick={() => resetSingleFilter('glaze')} class="hover:text-stone-900 dark:hover:text-white p-0.5 cursor-pointer" aria-label="Remove glaze filter"><X class="w-3 h-3" /></button>
+					</span>
+				{/if}
+
+				{#if filterTargetCone !== 'all'}
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30">
+						<span>Cone: {filterTargetCone}</span>
+						<button type="button" onclick={() => resetSingleFilter('targetCone')} class="hover:text-stone-900 dark:hover:text-white p-0.5 cursor-pointer" aria-label="Remove target cone filter"><X class="w-3 h-3" /></button>
+					</span>
+				{/if}
+
+				{#if filterDueDate !== 'all'}
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+						<span>Due: {filterDueDate === 'overdue' ? 'Late / Overdue' : filterDueDate === 'due_today' ? 'Due Today' : filterDueDate === 'less_than_1_week' ? '< 1 Week' : filterDueDate === 'less_than_2_weeks' ? '< 2 Weeks' : filterDueDate === 'has_due_date' ? 'Has Date' : 'No Date'}</span>
+						<button type="button" onclick={() => resetSingleFilter('dueDate')} class="hover:text-stone-900 dark:hover:text-white p-0.5 cursor-pointer" aria-label="Remove due date filter"><X class="w-3 h-3" /></button>
+					</span>
+				{/if}
+
+				{#if filterWeightEnabled}
+					<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30">
+						<span>Weight: {appliedMinWeight}–{appliedMaxWeight} {appliedWeightUnit}</span>
+						<button type="button" onclick={() => resetSingleFilter('weight')} class="hover:text-stone-900 dark:hover:text-white p-0.5 cursor-pointer" aria-label="Remove weight filter"><X class="w-3 h-3" /></button>
+					</span>
+				{/if}
+
+				<button
+					type="button"
+					onclick={clearAllFilters}
+					class="text-[11px] font-bold text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 underline ml-1 cursor-pointer"
+				>
+					Reset all ({filteredPieces.length} found)
+				</button>
+			</div>
+		{/if}
+	</div>
+
 	<!-- MOBILE STAGE SELECTOR TABS (Visible on mobile/tablet `< xl`) -->
 	<div class="flex xl:hidden items-center gap-1.5 overflow-x-auto pb-2 pt-0.5 no-scrollbar flex-shrink-0">
 		<button
@@ -1321,7 +1844,7 @@
 
 		{#each STAGES as stageInfo}
 			{@const count = stageInfo.id === 'done'
-				? (showLossArchive ? pieces.filter(p => p.stage === 'done').length : pieces.filter(p => p.stage === 'done' && !p.is_failed).length)
+				? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done').length : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed).length)
 				: activePieces.filter(p => p.stage === stageInfo.id).length}
 			<button
 				type="button"
@@ -1342,7 +1865,7 @@
 		<div class="flex-1 min-h-0 flex overflow-x-auto snap-x snap-mandatory gap-3.5 sm:gap-4 xl:grid xl:grid-cols-6 xl:overflow-visible pb-2 xl:pb-0">
 			{#each STAGES as stageInfo}
 				{@const columnPieces = stageInfo.id === 'done'
-					? (showLossArchive ? pieces.filter(p => p.stage === 'done') : pieces.filter(p => p.stage === 'done' && !p.is_failed))
+					? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done') : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed))
 					: activePieces.filter(p => p.stage === stageInfo.id)}
 				{#if mobileActiveStage === 'all' || mobileActiveStage === stageInfo.id}
 					<div 
@@ -1720,14 +2243,23 @@
 						{/each}
 
 						{#if columnPieces.length === 0}
-							<div class="h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center p-3 transition-all duration-200 {dragOverStageId === stageInfo.id ? 'border-[#E07A5F] bg-[#E07A5F]/10 scale-[1.02]' : 'border-stone-300 dark:border-stone-800/50'}">
-								<p class="text-[11px] font-medium {dragOverStageId === stageInfo.id ? 'text-[#E07A5F] font-bold' : 'text-stone-500'}">
-									{dragOverStageId === stageInfo.id ? 'Release to drop piece here' : 'Empty stage'}
-								</p>
-								{#if dragOverStageId === stageInfo.id}
-									<span class="text-[10px] text-stone-500 dark:text-stone-400 mt-1">Move to {stageInfo.label}</span>
-								{/if}
-							</div>
+							{#if hasActiveFilters}
+								<div class="h-44 border border-dashed rounded-xl flex flex-col items-center justify-center text-center p-4 bg-stone-100/60 dark:bg-stone-900/40 border-stone-300 dark:border-stone-800 space-y-1">
+									<FilterX class="w-7 h-7 text-stone-400 dark:text-stone-600 mb-1" />
+									<p class="text-xs font-bold text-stone-700 dark:text-stone-300">No matching pieces</p>
+									<p class="text-[10px] text-stone-500 dark:text-stone-400">Try adjusting your active filters.</p>
+									<button type="button" onclick={clearAllFilters} class="mt-2 px-2.5 py-1 text-[10px] font-bold bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 rounded-lg transition cursor-pointer">Clear Filters</button>
+								</div>
+							{:else}
+								<div class="h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center p-3 transition-all duration-200 {dragOverStageId === stageInfo.id ? 'border-[#E07A5F] bg-[#E07A5F]/10 scale-[1.02]' : 'border-stone-300 dark:border-stone-800/50'}">
+									<p class="text-[11px] font-medium {dragOverStageId === stageInfo.id ? 'text-[#E07A5F] font-bold' : 'text-stone-500'}">
+										{dragOverStageId === stageInfo.id ? 'Release to drop piece here' : 'Empty stage'}
+									</p>
+									{#if dragOverStageId === stageInfo.id}
+										<span class="text-[10px] text-stone-500 dark:text-stone-400 mt-1">Move to {stageInfo.label}</span>
+									{/if}
+								</div>
+							{/if}
 						{/if}
 					</div>
 				</div>
@@ -1736,6 +2268,223 @@
 		</div>
 	</div>
 </div>
+
+<!-- MOBILE FILTER DRAWER MODAL -->
+{#if isMobileFilterDrawerOpen}
+	<div class="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs transition-opacity duration-300">
+		<div class="w-full max-w-sm bg-white dark:bg-stone-900 h-full flex flex-col shadow-2xl border-l border-stone-200 dark:border-stone-800">
+			<!-- Drawer Header -->
+			<div class="p-4 border-b border-stone-200 dark:border-stone-800 flex items-center justify-between bg-stone-50 dark:bg-stone-950/50">
+				<div class="flex items-center gap-2">
+					<SlidersHorizontal class="w-5 h-5 text-[#E07A5F]" />
+					<h3 class="font-display font-extrabold text-base text-stone-900 dark:text-stone-100">Filter Pieces</h3>
+				</div>
+				<button
+					type="button"
+					onclick={() => isMobileFilterDrawerOpen = false}
+					class="p-1 rounded-lg text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 cursor-pointer"
+					aria-label="Close filter drawer"
+				>
+					<X class="w-5 h-5" />
+				</button>
+			</div>
+
+			<!-- Drawer Form Controls -->
+			<div class="p-4 space-y-4 flex-1 overflow-y-auto">
+				<!-- Search -->
+				<div class="space-y-1.5">
+					<label for="drawer-search-input" class="block text-xs font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">Search Query</label>
+					<div class="relative">
+						<Search class="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+						<input
+							id="drawer-search-input"
+							type="text"
+							bind:value={filterSearchQuery}
+							placeholder="Search titles, notes, clay..."
+							class="w-full pl-9 pr-8 py-2 text-sm bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 rounded-xl border border-stone-200 dark:border-stone-700 focus:outline-hidden focus:ring-2 focus:ring-[#E07A5F]"
+						/>
+						{#if filterSearchQuery}
+							<button
+								type="button"
+								onclick={() => filterSearchQuery = ''}
+								class="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 cursor-pointer"
+							>
+								<X class="w-4 h-4" />
+							</button>
+						{/if}
+					</div>
+				</div>
+
+				<!-- Form Type -->
+				<div class="space-y-1.5">
+					<label for="drawer-form-type" class="block text-xs font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">Form Type</label>
+					<select
+						id="drawer-form-type"
+						bind:value={filterFormType}
+						class="w-full px-3 py-2 text-sm bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 rounded-xl border border-stone-200 dark:border-stone-700 focus:outline-hidden focus:ring-2 focus:ring-[#E07A5F] cursor-pointer"
+					>
+						<option value="all">All Form Types</option>
+						{#each availablePieceTypes as typeName}
+							<option value={typeName}>{typeName}</option>
+						{/each}
+					</select>
+				</div>
+
+				<!-- Clay Body -->
+				<div class="space-y-1.5">
+					<label for="drawer-clay-body" class="block text-xs font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">Clay Body</label>
+					<select
+						id="drawer-clay-body"
+						bind:value={filterClayBody}
+						class="w-full px-3 py-2 text-sm bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 rounded-xl border border-stone-200 dark:border-stone-700 focus:outline-hidden focus:ring-2 focus:ring-[#E07A5F] cursor-pointer"
+					>
+						<option value="all">All Clay Bodies</option>
+						{#each availableClayBodies as clayName}
+							<option value={clayName}>{clayName}</option>
+						{/each}
+					</select>
+				</div>
+
+				<!-- Glaze -->
+				<div class="space-y-1.5">
+					<label for="drawer-glaze" class="block text-xs font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">Glaze Application</label>
+					<select
+						id="drawer-glaze"
+						bind:value={filterGlaze}
+						class="w-full px-3 py-2 text-sm bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 rounded-xl border border-stone-200 dark:border-stone-700 focus:outline-hidden focus:ring-2 focus:ring-[#E07A5F] cursor-pointer"
+					>
+						<option value="all">All Glazes</option>
+						<option value="unglazed">Unglazed Only</option>
+						{#each availableGlazes as glazeName}
+							<option value={glazeName}>{glazeName}</option>
+						{/each}
+					</select>
+				</div>
+
+				<!-- Target Cone -->
+				<div class="space-y-1.5">
+					<label for="drawer-target-cone" class="block text-xs font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">Firing Cone</label>
+					<select
+						id="drawer-target-cone"
+						bind:value={filterTargetCone}
+						class="w-full px-3 py-2 text-sm bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 rounded-xl border border-stone-200 dark:border-stone-700 focus:outline-hidden focus:ring-2 focus:ring-[#E07A5F] cursor-pointer"
+					>
+						<option value="all">All Cones</option>
+						{#each availableCones as coneName}
+							<option value={coneName}>{coneName}</option>
+						{/each}
+					</select>
+				</div>
+
+				<!-- Due Date -->
+				<div class="space-y-1.5">
+					<label for="drawer-due-date" class="block text-xs font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">Due Date Status</label>
+					<select
+						id="drawer-due-date"
+						bind:value={filterDueDate}
+						class="w-full px-3 py-2 text-sm bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 rounded-xl border border-stone-200 dark:border-stone-700 focus:outline-hidden focus:ring-2 focus:ring-[#E07A5F] cursor-pointer"
+					>
+						<option value="all">All Due Dates</option>
+						<option value="overdue">Late / Overdue</option>
+						<option value="due_today">Due Today</option>
+						<option value="less_than_1_week">Due in &lt; 1 Week</option>
+						<option value="less_than_2_weeks">Due in &lt; 2 Weeks</option>
+						<option value="has_due_date">Has Due Date</option>
+						<option value="no_due_date">No Due Date</option>
+					</select>
+				</div>
+
+				<!-- Clay Weight Range Slider & Unit Selector -->
+				<div class="space-y-2.5 p-3 bg-stone-50 dark:bg-stone-800/40 rounded-xl border border-stone-200 dark:border-stone-800">
+					<div class="flex items-center justify-between">
+						<label for="mobile-weight-range-min" class="block text-xs font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">Clay Weight</label>
+						<!-- Unit Selector Pills -->
+						<div class="flex items-center p-0.5 bg-stone-200 dark:bg-stone-800 rounded-lg text-[10px] font-bold">
+							{#each (['g', 'kg', 'oz', 'lbs'] as WeightUnit[]) as u}
+								<button
+									type="button"
+									onclick={() => handleWeightUnitChange(u)}
+									class="px-2 py-0.5 rounded-md transition cursor-pointer {draftWeightUnit === u ? 'bg-white dark:bg-stone-700 text-[#E07A5F] shadow-xs font-bold' : 'text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200'}"
+								>
+									{u}
+								</button>
+							{/each}
+						</div>
+					</div>
+
+					<!-- Min Slider -->
+					<div class="space-y-1 pt-1">
+						<div class="flex items-center justify-between text-xs text-stone-600 dark:text-stone-400">
+							<span>Min Weight:</span>
+							<span class="font-bold text-stone-900 dark:text-stone-100">{draftMinWeight} {draftWeightUnit}</span>
+						</div>
+						<input
+							id="mobile-weight-range-min"
+							type="range"
+							min="0"
+							max={weightSliderMax}
+							step={weightSliderStep}
+							bind:value={draftMinWeight}
+							class="w-full accent-[#E07A5F] cursor-pointer"
+						/>
+					</div>
+
+					<!-- Max Slider -->
+					<div class="space-y-1">
+						<div class="flex items-center justify-between text-xs text-stone-600 dark:text-stone-400">
+							<span>Max Weight:</span>
+							<span class="font-bold text-stone-900 dark:text-stone-100">{draftMaxWeight} {draftWeightUnit}</span>
+						</div>
+						<input
+							type="range"
+							min="0"
+							max={weightSliderMax}
+							step={weightSliderStep}
+							bind:value={draftMaxWeight}
+							class="w-full accent-[#E07A5F] cursor-pointer"
+						/>
+					</div>
+
+					<!-- Apply / Reset Weight Buttons -->
+					<div class="flex items-center gap-2 pt-1.5">
+						<button
+							type="button"
+							onclick={resetWeightFilter}
+							class="flex-1 py-1.5 text-xs font-semibold rounded-lg border border-stone-300 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition text-center cursor-pointer"
+						>
+							Reset Weight
+						</button>
+						<button
+							type="button"
+							onclick={applyWeightFilter}
+							class="flex-1 py-1.5 text-xs font-bold rounded-lg bg-[#E07A5F] hover:bg-[#C85A32] text-white transition text-center cursor-pointer shadow-xs"
+						>
+							Apply Weight
+						</button>
+					</div>
+				</div>
+			</div>
+
+			<!-- Drawer Footer -->
+			<div class="p-4 border-t border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950/50 flex items-center gap-3">
+				<button
+					type="button"
+					onclick={clearAllFilters}
+					class="flex-1 py-2.5 text-xs font-bold rounded-xl border border-stone-300 dark:border-stone-700 text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition text-center cursor-pointer"
+				>
+					Reset All
+				</button>
+				<button
+					type="button"
+					onclick={() => isMobileFilterDrawerOpen = false}
+					class="flex-1 py-2.5 text-xs font-bold rounded-xl bg-[#E07A5F] hover:bg-[#C85A32] text-white transition text-center shadow-md shadow-[#C85A32]/20 cursor-pointer"
+				>
+					Apply ({filteredPieces.length})
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <!-- MODAL 1: CREATE NEW CERAMIC PIECE -->
 {#if isNewPieceModalOpen}
