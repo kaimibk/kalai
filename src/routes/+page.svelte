@@ -2166,7 +2166,7 @@
 	</div>
 
 	<!-- MOBILE STAGE SELECTOR TABS (Visible on mobile/tablet `< xl`) -->
-	<div class="flex items-center gap-1.5 overflow-x-auto touch-pan-x pb-2 pt-0.5 no-scrollbar flex-shrink-0">
+	<div class="flex items-center gap-1.5 overflow-x-auto pb-2 pt-0.5 no-scrollbar flex-shrink-0">
 		<button
 			type="button"
 			onclick={() => mobileActiveStage = 'all'}
@@ -2197,8 +2197,8 @@
 	</div>
 
 	<!-- STREAMLINED 6-STAGE RESPONSIVE KANBAN BOARD CONTAINER -->
-	<div class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto touch-pan-x pb-2">
-		<div class="flex-1 min-h-0 flex overflow-x-auto touch-pan-x snap-x snap-mandatory gap-3.5 pb-2">
+	<div class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto pb-2">
+		<div class="flex-1 min-h-0 flex overflow-x-auto snap-x snap-mandatory gap-3.5 pb-2">
 			{#each STAGES as stageInfo}
 				{@const columnPieces = stageInfo.id === 'done'
 					? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done') : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed))
@@ -2227,7 +2227,7 @@
 					</div>
 
 					<!-- Cards Column -->
-					<div class="space-y-3 flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden touch-pan-y snap-y snap-mandatory scroll-smooth px-1.5 py-1" role="list">
+					<div class="space-y-3 flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden snap-y snap-mandatory scroll-smooth px-1.5 py-1" role="list">
 						{#each getStageCardGroups(stageInfo.id) as group}
 							{@const groupKey = group.isBatch ? group.batchId! : group.primaryPiece.id}
 							{@const isCardHovered = dragOverCardGroupKey === groupKey}
