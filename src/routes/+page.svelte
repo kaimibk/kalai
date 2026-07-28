@@ -2166,7 +2166,7 @@
 	</div>
 
 	<!-- MOBILE STAGE SELECTOR TABS (Visible on mobile/tablet `< xl`) -->
-	<div class="flex items-center gap-1.5 overflow-x-auto pb-2 pt-0.5 no-scrollbar flex-shrink-0">
+	<div class="flex items-center justify-start sm:justify-center gap-1.5 overflow-x-auto pb-2 pt-0.5 no-scrollbar flex-shrink-0">
 		<button
 			type="button"
 			onclick={() => mobileActiveStage = 'all'}
@@ -2197,8 +2197,8 @@
 	</div>
 
 	<!-- STREAMLINED 6-STAGE RESPONSIVE KANBAN BOARD CONTAINER -->
-	<div class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto pb-2">
-		<div class="flex-1 min-h-0 flex overflow-x-auto snap-x snap-mandatory gap-3.5 pb-2">
+	<div class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2">
+		<div class="flex-1 min-h-0 flex justify-center snap-x snap-mandatory gap-3.5 pb-2 min-w-full w-max mx-auto px-2 sm:px-4">
 			{#each STAGES as stageInfo}
 				{@const columnPieces = stageInfo.id === 'done'
 					? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done') : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed))
@@ -2208,7 +2208,7 @@
 						role="region"
 						aria-label={stageInfo.label}
 						data-stage-id={stageInfo.id}
-						class="{mobileActiveStage === stageInfo.id ? 'w-full min-w-full' : 'w-[85vw] min-w-[280px] max-w-[340px]'} flex-shrink-0 snap-start bg-stone-200/50 dark:bg-stone-900/40 rounded-2xl p-3 border transition-all duration-200 flex flex-col flex-1 min-h-[480px] max-h-[70vh] overflow-hidden {stageInfo.color} {dragOverStageId === stageInfo.id ? 'ring-2 ring-[#E07A5F] bg-stone-200/90 dark:bg-stone-900/80 scale-[1.01] shadow-lg shadow-[#E07A5F]/10' : ''}"
+						class="{mobileActiveStage === stageInfo.id ? 'w-full min-w-full' : 'w-[85vw] min-w-[280px] max-w-[340px]'} flex-shrink-0 snap-center snap-always bg-stone-200/50 dark:bg-stone-900/40 rounded-2xl p-3 border transition-all duration-200 flex flex-col flex-1 min-h-[480px] max-h-[70vh] overflow-hidden {stageInfo.color} {dragOverStageId === stageInfo.id ? 'ring-2 ring-[#E07A5F] bg-stone-200/90 dark:bg-stone-900/80 scale-[1.01] shadow-lg shadow-[#E07A5F]/10' : ''}"
 						ondragover={(e) => handleDragOver(e, stageInfo.id)}
 						ondragenter={(e) => handleDragOver(e, stageInfo.id)}
 						ondragleave={(e) => handleDragLeave(e, stageInfo.id)}
