@@ -139,7 +139,18 @@ VALUES
   ('00000000-0000-0000-0000-000000000005', TRUE, 'Ochre Heavy Stoneware', 'Laguna Clay', 'Cone 6', 'Cone 10', 'Cone 6-10', 13.0, 'Dark Brown', 'Toast Ochre')
 ON CONFLICT (id) DO NOTHING;
 
--- 7. Ceramic Pieces (Streamlined 6 Kanban Stages)
+-- 7. Batches Table (For multi-piece duplicate creation and split job tracking)
+CREATE TABLE IF NOT EXISTS public.batches (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  parent_batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 8. Ceramic Pieces (Streamlined 6 Kanban Stages)
 CREATE TABLE IF NOT EXISTS public.ceramic_pieces (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -150,6 +161,9 @@ CREATE TABLE IF NOT EXISTS public.ceramic_pieces (
   clay_body_name TEXT,
   
   stage TEXT REFERENCES public.kanban_stages(id) DEFAULT 'backlog',
+
+  batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
+  batch_sequence INT,
 
   is_failed BOOLEAN DEFAULT FALSE,
   failure_stage TEXT REFERENCES public.kanban_stages(id),
@@ -227,6 +241,7 @@ ALTER TABLE public.manufacturers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.piece_types ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.kanban_stages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.clay_bodies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.batches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ceramic_pieces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.piece_stage_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.glaze_recipes ENABLE ROW LEVEL SECURITY;
@@ -237,6 +252,10 @@ CREATE POLICY "Public read pyrometric cones" ON public.pyrometric_cones FOR SELE
 CREATE POLICY "Public read manufacturers" ON public.manufacturers FOR SELECT USING (TRUE);
 CREATE POLICY "Public read piece types" ON public.piece_types FOR SELECT USING (TRUE);
 CREATE POLICY "Public read kanban stages" ON public.kanban_stages FOR SELECT USING (TRUE);
+
+-- Batches: Owner isolated
+CREATE POLICY "Users access own batches" ON public.batches 
+  FOR ALL USING (user_id = auth.uid());
 
 -- Clay Bodies
 CREATE POLICY "Read global or own clay bodies" ON public.clay_bodies 

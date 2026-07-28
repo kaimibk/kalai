@@ -27,7 +27,9 @@
 	import Palette from 'lucide-svelte/icons/palette';
 	import GripVertical from 'lucide-svelte/icons/grip-vertical';
 	import FileText from 'lucide-svelte/icons/file-text';
-	import type { CeramicPiece, ClayBody, CeramicStage, PieceStageLog, PieceGlazeLayer, GlazeRecipe, GlazeStyle, GlazeLocation, PyrometricCone, Manufacturer, PieceType } from '$lib/types/database';
+	import GitFork from 'lucide-svelte/icons/git-fork';
+	import Boxes from 'lucide-svelte/icons/boxes';
+	import type { CeramicPiece, ClayBody, CeramicStage, PieceStageLog, PieceGlazeLayer, GlazeRecipe, GlazeStyle, GlazeLocation, PyrometricCone, Manufacturer, PieceType, PieceBatch } from '$lib/types/database';
 
 	// Full Skutt / Orton Pyrometric Cones Temperature Equivalents Dataset
 	const PYROMETRIC_CONES: PyrometricCone[] = [
@@ -155,8 +157,45 @@
 		{ id: 'glz-6', is_global: false, name: 'Tenmoku Satin Black', manufacturer: 'Custom Studio', default_style: 'dip', min_cone: 'Cone 5', max_cone: 'Cone 6', target_cone: 'Cone 6', atmosphere: 'Oxidation / Reduction', batch_liters: 5.0, notes: 'Rich iron black with bronze oil-spotting.' }
 	]);
 
-	// Sample Initial Pieces
+	// Sample Initial Pieces (Includes a 6-piece duplicate batch)
+	const sampleBatchObj: PieceBatch = {
+		id: 'b-101',
+		user_id: 'user-1',
+		title: '6x Speckled Studio Mugs',
+		description: 'Board of 6 identical thrown mugs',
+		created_at: '2026-07-25',
+		updated_at: '2026-07-25'
+	};
+
+	const sampleBatchPieces: CeramicPiece[] = Array.from({ length: 6 }).map((_, i) => ({
+		id: `p-batch-101-${i + 1}`,
+		user_id: 'user-1',
+		title: `Speckled Studio Mug #${i + 1}`,
+		description: 'Thrown on wheel with 420g Laguna Speckled Buff. Clean rim.',
+		piece_type: 'Mug',
+		clay_body_id: 'cb-1',
+		clay_body_name: 'Speckled Buff 80',
+		stage: 'bone_dry' as CeramicStage,
+		batch_id: 'b-101',
+		batch_sequence: i + 1,
+		batch: sampleBatchObj,
+		is_failed: false,
+		target_bisque_cone: 'Cone 04',
+		target_glaze_cone: 'Cone 6',
+		weight_grams: 420,
+		height_cm: 9.5,
+		width_cm: 8.5,
+		initial_photo_url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&auto=format&fit=crop&q=80',
+		created_at: '2026-07-25',
+		updated_at: '2026-07-25',
+		stage_logs: [
+			{ id: `log-b-${i + 1}`, piece_id: `p-batch-101-${i + 1}`, user_id: 'user-1', stage: 'formed', weight_grams: 480, notes: 'Thrown in batch of 6.', created_at: '2026-07-25' }
+		],
+		glaze_layers: []
+	}));
+
 	let pieces = $state<CeramicPiece[]>([
+		...sampleBatchPieces,
 		{
 			id: 'p-101',
 			user_id: 'user-1',
@@ -236,7 +275,7 @@
 	let showFailedDrawer = $state(false);
 	let selectedPiece = $state<CeramicPiece | null>(null);
 
-	// New Piece Modal State
+	// New Piece Modal State (With Multi-Piece Batch Support)
 	let isNewPieceModalOpen = $state(false);
 	let newTitle = $state('');
 	let newDescription = $state('');
@@ -248,6 +287,19 @@
 	let newWeightUnit = $state<WeightUnit>('g');
 	let newInitialPhotoUrl = $state('');
 	let newStage = $state<CeramicStage>('backlog');
+	let newQuantity = $state(1);
+	let newBatchTitle = $state('');
+
+	// Job Splitting Modal State
+	let isSplitModalOpen = $state(false);
+	let splitTargetBatchId = $state<string | null>(null);
+	let splitTargetBatchTitle = $state<string>('');
+	let splitTargetStage = $state<CeramicStage | null>(null);
+	let splitBatchPieces = $state<CeramicPiece[]>([]);
+	let splitSelectedPieceIds = $state<string[]>([]);
+	let splitAction = $state<'new_batch' | 'detach' | 'fail'>('new_batch');
+	let splitNewSubBatchTitle = $state<string>('');
+	let splitFailReason = $state<string>('S-crack in foot during firing');
 
 	// Glaze Tagging Form State (inside Piece Detail Modal)
 	let selectedGlazeOption = $state<string>('glz-1');
@@ -293,7 +345,9 @@
 
 	// Drag & Drop State
 	let draggedPieceId = $state<string | null>(null);
+	let draggedBatchKey = $state<string | null>(null); // Format: "batchId::stageId::glazeSig"
 	let dragOverStageId = $state<CeramicStage | null>(null);
+	let dragOverCardGroupKey = $state<string | null>(null);
 	let toastMessage = $state<string | null>(null);
 	let toastTimeout: ReturnType<typeof setTimeout>;
 
@@ -307,15 +361,27 @@
 
 	function handleDragStart(e: DragEvent, pieceId: string) {
 		draggedPieceId = pieceId;
+		draggedBatchKey = null;
 		if (e.dataTransfer) {
 			e.dataTransfer.effectAllowed = 'move';
 			e.dataTransfer.setData('text/plain', pieceId);
 		}
 	}
 
+	function handleBatchDragStart(e: DragEvent, batchId: string, stageId: CeramicStage, glazeSig: string) {
+		draggedBatchKey = `${batchId}::${stageId}::${glazeSig}`;
+		draggedPieceId = null;
+		if (e.dataTransfer) {
+			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.setData('text/plain', draggedBatchKey);
+		}
+	}
+
 	function handleDragEnd() {
 		draggedPieceId = null;
+		draggedBatchKey = null;
 		dragOverStageId = null;
+		dragOverCardGroupKey = null;
 	}
 
 	function handleDragOver(e: DragEvent, stageId: CeramicStage) {
@@ -339,32 +405,427 @@
 		}
 	}
 
+	function handleCardDragOver(e: DragEvent, group: KanbanDisplayGroup) {
+		e.preventDefault();
+		e.stopPropagation();
+		if (e.dataTransfer) {
+			e.dataTransfer.dropEffect = 'move';
+		}
+		const key = group.isBatch ? group.batchId! : group.primaryPiece.id;
+		if (dragOverCardGroupKey !== key) {
+			dragOverCardGroupKey = key;
+		}
+	}
+
+	function handleCardDragLeave(e: DragEvent, group: KanbanDisplayGroup) {
+		const relatedTarget = e.relatedTarget as HTMLElement | null;
+		const currentTarget = e.currentTarget as HTMLElement | null;
+		if (currentTarget && relatedTarget && currentTarget.contains(relatedTarget)) {
+			return;
+		}
+		const key = group.isBatch ? group.batchId! : group.primaryPiece.id;
+		if (dragOverCardGroupKey === key) {
+			dragOverCardGroupKey = null;
+		}
+	}
+
+	function handleCardDrop(e: DragEvent, targetGroup: KanbanDisplayGroup) {
+		e.preventDefault();
+		e.stopPropagation();
+
+		const targetPiece = targetGroup.primaryPiece;
+		const targetBatchId = targetGroup.isBatch ? targetGroup.batchId : targetPiece.batch_id;
+
+		let sourcePiecesToMerge: CeramicPiece[] = [];
+
+		if (draggedBatchKey) {
+			const [srcBatchId, srcStage, srcGlazeSig] = draggedBatchKey.split('::');
+			if (srcBatchId === targetBatchId) {
+				draggedPieceId = null;
+				draggedBatchKey = null;
+				dragOverCardGroupKey = null;
+				return;
+			}
+			sourcePiecesToMerge = pieces.filter(p => p.batch_id === srcBatchId && p.stage === srcStage && !p.is_failed);
+		} else if (draggedPieceId) {
+			if (draggedPieceId === targetPiece.id) {
+				draggedPieceId = null;
+				draggedBatchKey = null;
+				dragOverCardGroupKey = null;
+				return;
+			}
+			const srcPiece = pieces.find(p => p.id === draggedPieceId);
+			if (srcPiece) sourcePiecesToMerge = [srcPiece];
+		}
+
+		if (sourcePiecesToMerge.length === 0) {
+			draggedPieceId = null;
+			draggedBatchKey = null;
+			dragOverCardGroupKey = null;
+			return;
+		}
+
+		// SIMPLE VALIDATION: Same clay body, same form type, same stage
+		const invalidItems = sourcePiecesToMerge.filter(p => 
+			(p.clay_body_id && targetPiece.clay_body_id ? p.clay_body_id !== targetPiece.clay_body_id : p.clay_body_name !== targetPiece.clay_body_name) ||
+			p.piece_type !== targetPiece.piece_type ||
+			p.stage !== targetPiece.stage
+		);
+
+		if (invalidItems.length > 0) {
+			showToast(`Cannot merge: Items must share the same clay (${targetPiece.clay_body_name}), form type (${targetPiece.piece_type}), and stage!`);
+			draggedPieceId = null;
+			draggedBatchKey = null;
+			dragOverCardGroupKey = null;
+			return;
+		}
+
+		// Prepare batch ID & object
+		const effectiveBatchId = targetBatchId || `b-${Date.now()}`;
+		const effectiveBatchTitle = targetGroup.batchTitle || targetPiece.batch?.title || `${targetPiece.title.replace(/\s*#\d+$/, '')} Batch`;
+
+		const batchObj: PieceBatch = targetPiece.batch || {
+			id: effectiveBatchId,
+			user_id: 'user-1',
+			title: effectiveBatchTitle,
+			created_at: new Date().toISOString().split('T')[0],
+			updated_at: new Date().toISOString().split('T')[0]
+		};
+
+		const sourceIds = new Set(sourcePiecesToMerge.map(p => p.id));
+
+		pieces = pieces.map(p => {
+			if (sourceIds.has(p.id) || p.id === targetPiece.id) {
+				return {
+					...p,
+					batch_id: effectiveBatchId,
+					batch: batchObj,
+					updated_at: new Date().toISOString().split('T')[0]
+				};
+			}
+			return p;
+		});
+
+		showToast(`Re-added ${sourcePiecesToMerge.length} piece(s) back into batch "${effectiveBatchTitle}"!`);
+
+		draggedPieceId = null;
+		draggedBatchKey = null;
+		dragOverCardGroupKey = null;
+		dragOverStageId = null;
+	}
+
 	function handleDrop(e: DragEvent, targetStage: CeramicStage) {
 		e.preventDefault();
-		const pieceId = draggedPieceId || e.dataTransfer?.getData('text/plain');
-		if (!pieceId) return;
+		const targetStageObj = STAGES.find(s => s.id === targetStage);
+		const stageName = targetStageObj?.label || targetStage;
 
-		const piece = pieces.find(p => p.id === pieceId);
-		if (piece && piece.stage !== targetStage) {
-			const targetStageObj = STAGES.find(s => s.id === targetStage);
-			const stageName = targetStageObj?.label || targetStage;
+		if (draggedBatchKey) {
+			const [bId, srcStage, glazeSig] = draggedBatchKey.split('::');
+			pieces = pieces.map(p => {
+				if (p.batch_id === bId && p.stage === srcStage && !p.is_failed) {
+					const pGlazeSig = p.glaze_layers ? p.glaze_layers.map(g => g.glaze_name).sort().join('|') : '';
+					if (pGlazeSig === glazeSig) {
+						return {
+							...p,
+							stage: targetStage,
+							updated_at: new Date().toISOString().split('T')[0]
+						};
+					}
+				}
+				return p;
+			});
+			showToast(`Moved batch pieces to ${stageName}`);
+		} else if (draggedPieceId) {
+			const piece = pieces.find(p => p.id === draggedPieceId);
+			if (piece && piece.stage !== targetStage) {
+				pieces = pieces.map(p => {
+					if (p.id === draggedPieceId) {
+						return {
+							...p,
+							stage: targetStage,
+							updated_at: new Date().toISOString().split('T')[0]
+						};
+					}
+					return p;
+				});
+
+				showToast(`Moved "${piece.title}" to ${stageName}`);
+			}
+		}
+
+		draggedPieceId = null;
+		draggedBatchKey = null;
+		dragOverStageId = null;
+	}
+
+	// Smart Batch Kanban Card Grouping Helper
+	interface KanbanDisplayGroup {
+		isBatch: boolean;
+		batchId?: string;
+		batchTitle?: string;
+		glazeSignature?: string;
+		pieces: CeramicPiece[];
+		primaryPiece: CeramicPiece;
+	}
+
+	function getStageCardGroups(stageId: CeramicStage): KanbanDisplayGroup[] {
+		const columnPieces = activePieces.filter(p => p.stage === stageId);
+		const groups: KanbanDisplayGroup[] = [];
+
+		const batchMap = new Map<string, CeramicPiece[]>();
+		const nonBatched: CeramicPiece[] = [];
+
+		for (const piece of columnPieces) {
+			if (piece.batch_id) {
+				const glazeSig = piece.glaze_layers ? piece.glaze_layers.map(g => g.glaze_name).sort().join('|') : '';
+				const key = `${piece.batch_id}::${glazeSig}`;
+				if (!batchMap.has(key)) batchMap.set(key, []);
+				batchMap.get(key)!.push(piece);
+			} else {
+				nonBatched.push(piece);
+			}
+		}
+
+		// Add individual standalone pieces
+		for (const p of nonBatched) {
+			groups.push({
+				isBatch: false,
+				pieces: [p],
+				primaryPiece: p
+			});
+		}
+
+		// Add stacked batch groups
+		for (const [key, bPieces] of batchMap.entries()) {
+			const [bId, glazeSig] = key.split('::');
+			if (bPieces.length === 1) {
+				// Single piece in stage
+				groups.push({
+					isBatch: false,
+					pieces: bPieces,
+					primaryPiece: bPieces[0]
+				});
+			} else {
+				const first = bPieces[0];
+				const bTitle = first.batch?.title || `${first.title.replace(/\s*#\d+$/, '')} Batch`;
+				groups.push({
+					isBatch: true,
+					batchId: bId,
+					batchTitle: bTitle,
+					glazeSignature: glazeSig,
+					pieces: bPieces,
+					primaryPiece: first
+				});
+			}
+		}
+
+		return groups;
+	}
+
+	// Job Splitting Modal Trigger & Handlers
+	function openSplitBatchModal(batchId: string, stageFilter?: CeramicStage) {
+		const targetPieces = pieces.filter(p => p.batch_id === batchId && !p.is_failed && (!stageFilter || p.stage === stageFilter));
+		if (targetPieces.length === 0) return;
+		
+		splitTargetBatchId = batchId;
+		splitTargetStage = stageFilter || null;
+		splitBatchPieces = targetPieces;
+		splitTargetBatchTitle = targetPieces[0]?.batch?.title || targetPieces[0]?.title.replace(/\s*#\d+$/, '') || 'Ceramic Batch';
+		splitSelectedPieceIds = targetPieces.map(p => p.id);
+		splitAction = 'new_batch';
+		splitNewSubBatchTitle = `${splitTargetBatchTitle} (Group B)`;
+		isSplitModalOpen = true;
+	}
+
+	function toggleSplitSelection(id: string) {
+		if (splitSelectedPieceIds.includes(id)) {
+			splitSelectedPieceIds = splitSelectedPieceIds.filter(x => x !== id);
+		} else {
+			splitSelectedPieceIds = [...splitSelectedPieceIds, id];
+		}
+	}
+
+	function selectAllSplitPieces() {
+		splitSelectedPieceIds = splitBatchPieces.map(p => p.id);
+	}
+
+	function deselectAllSplitPieces() {
+		splitSelectedPieceIds = [];
+	}
+
+	function executeSplitBatch() {
+		if (splitSelectedPieceIds.length === 0) {
+			showToast('Please select at least 1 piece to split.');
+			return;
+		}
+
+		const selectedSet = new Set(splitSelectedPieceIds);
+		const count = splitSelectedPieceIds.length;
+		const nowStr = new Date().toISOString().split('T')[0];
+
+		if (splitAction === 'new_batch') {
+			// Sub-batch split
+			const newSubBatchId = `b-${Date.now()}`;
+			const newSubBatchTitle = splitNewSubBatchTitle.trim() || `${splitTargetBatchTitle} (Group B)`;
+			const subBatchObj: PieceBatch = {
+				id: newSubBatchId,
+				user_id: 'user-1',
+				title: newSubBatchTitle,
+				parent_batch_id: splitTargetBatchId || undefined,
+				created_at: nowStr,
+				updated_at: nowStr
+			};
 
 			pieces = pieces.map(p => {
-				if (p.id === pieceId) {
+				if (selectedSet.has(p.id)) {
 					return {
 						...p,
-						stage: targetStage,
-						updated_at: new Date().toISOString().split('T')[0]
+						batch_id: newSubBatchId,
+						batch: subBatchObj,
+						updated_at: nowStr
 					};
 				}
 				return p;
 			});
 
-			showToast(`Moved "${piece.title}" to ${stageName}`);
+			showToast(`Split ${count} piece(s) into sub-batch "${newSubBatchTitle}"!`);
+		} else if (splitAction === 'detach') {
+			// Make selected standalone (clear batch_id)
+			pieces = pieces.map(p => {
+				if (selectedSet.has(p.id)) {
+					return {
+						...p,
+						batch_id: null,
+						batch_sequence: null,
+						batch: null,
+						updated_at: nowStr
+					};
+				}
+				return p;
+			});
+
+			showToast(`Detached ${count} piece(s) from batch as standalone pieces!`);
+		} else if (splitAction === 'fail') {
+			// Flag selected as failed
+			pieces = pieces.map(p => {
+				if (selectedSet.has(p.id)) {
+					return {
+						...p,
+						is_failed: true,
+						failure_stage: p.stage,
+						failure_reason: splitFailReason,
+						failed_at: nowStr
+					};
+				}
+				return p;
+			});
+
+			showToast(`Marked ${count} piece(s) as failed ("${splitFailReason}"). Remaining batch items stay active!`);
 		}
 
-		draggedPieceId = null;
-		dragOverStageId = null;
+		isSplitModalOpen = false;
+	}
+
+	function advanceBatchGroupStage(group: KanbanDisplayGroup) {
+		const stageOrder: CeramicStage[] = [
+			'backlog', 'formed', 'ready_to_trim', 'bone_dry', 'glazed', 'done'
+		];
+		const pieceIds = new Set(group.pieces.map(p => p.id));
+		
+		pieces = pieces.map(p => {
+			if (pieceIds.has(p.id)) {
+				const currentIndex = stageOrder.indexOf(p.stage);
+				if (currentIndex >= 0 && currentIndex < stageOrder.length - 1) {
+					const nextStage = stageOrder[currentIndex + 1];
+					return { ...p, stage: nextStage, updated_at: new Date().toISOString().split('T')[0] };
+				}
+			}
+			return p;
+		});
+
+		showToast(`Moved ${group.pieces.length} batch items to next stage!`);
+	}
+
+	function handleCreatePiece(e: Event) {
+		e.preventDefault();
+		if (!newTitle.trim()) return;
+		const selectedClay = clayBodies.find(c => c.id === newClayBodyId);
+		const calculatedGrams = newWeightAmount && newWeightAmount > 0 
+			? toGrams(newWeightAmount, newWeightUnit) 
+			: null;
+
+		const qty = Math.max(1, Math.min(50, newQuantity));
+		const nowStr = new Date().toISOString().split('T')[0];
+
+		if (qty > 1) {
+			const batchId = `b-${Date.now()}`;
+			const bTitle = newBatchTitle.trim() || `${newTitle} Batch (${qty} pcs)`;
+			const batchObj: PieceBatch = {
+				id: batchId,
+				user_id: 'user-1',
+				title: bTitle,
+				created_at: nowStr,
+				updated_at: nowStr
+			};
+
+			const newBatchPieces: CeramicPiece[] = Array.from({ length: qty }).map((_, idx) => ({
+				id: `p-${Date.now()}-${idx + 1}`,
+				user_id: 'user-1',
+				title: `${newTitle} #${idx + 1}`,
+				description: newDescription.trim() || null,
+				notes: newDescription.trim() || null,
+				piece_type: newPieceType,
+				clay_body_id: newClayBodyId,
+				clay_body_name: selectedClay ? selectedClay.name : 'Speckled Buff 80',
+				stage: newStage,
+				batch_id: batchId,
+				batch_sequence: idx + 1,
+				batch: batchObj,
+				is_failed: false,
+				target_bisque_cone: newTargetBisqueCone,
+				target_glaze_cone: newTargetGlazeCone,
+				weight_grams: calculatedGrams,
+				initial_photo_url: newInitialPhotoUrl.trim() || null,
+				created_at: nowStr,
+				updated_at: nowStr,
+				stage_logs: [],
+				glaze_layers: []
+			}));
+
+			pieces = [...newBatchPieces, ...pieces];
+			showToast(`Created batch of ${qty} pieces ("${bTitle}")!`);
+		} else {
+			const created: CeramicPiece = {
+				id: `p-${Date.now()}`,
+				user_id: 'user-1',
+				title: newTitle,
+				description: newDescription.trim() || null,
+				notes: newDescription.trim() || null,
+				piece_type: newPieceType,
+				clay_body_id: newClayBodyId,
+				clay_body_name: selectedClay ? selectedClay.name : 'Speckled Buff 80',
+				stage: newStage,
+				is_failed: false,
+				target_bisque_cone: newTargetBisqueCone,
+				target_glaze_cone: newTargetGlazeCone,
+				weight_grams: calculatedGrams,
+				initial_photo_url: newInitialPhotoUrl.trim() || null,
+				created_at: nowStr,
+				updated_at: nowStr,
+				stage_logs: [],
+				glaze_layers: []
+			};
+			pieces = [created, ...pieces];
+			showToast(`Created piece "${newTitle}"!`);
+		}
+
+		newTitle = '';
+		newDescription = '';
+		newWeightAmount = null;
+		newInitialPhotoUrl = '';
+		newQuantity = 1;
+		newBatchTitle = '';
+		isNewPieceModalOpen = false;
 	}
 
 	// Derived lists
@@ -450,42 +911,6 @@
 
 	function restoreFailedPiece(pieceId: string) {
 		pieces = pieces.map(p => p.id === pieceId ? { ...p, is_failed: false, failure_stage: null, failure_reason: null } : p);
-	}
-
-	function handleCreatePiece(e: Event) {
-		e.preventDefault();
-		if (!newTitle.trim()) return;
-		const selectedClay = clayBodies.find(c => c.id === newClayBodyId);
-		const calculatedGrams = newWeightAmount && newWeightAmount > 0 
-			? toGrams(newWeightAmount, newWeightUnit) 
-			: null;
-
-		const created: CeramicPiece = {
-			id: `p-${Date.now()}`,
-			user_id: 'user-1',
-			title: newTitle,
-			description: newDescription.trim() || null,
-			notes: newDescription.trim() || null,
-			piece_type: newPieceType,
-			clay_body_id: newClayBodyId,
-			clay_body_name: selectedClay ? selectedClay.name : 'Speckled Buff 80',
-			stage: newStage,
-			is_failed: false,
-			target_bisque_cone: newTargetBisqueCone,
-			target_glaze_cone: newTargetGlazeCone,
-			weight_grams: calculatedGrams,
-			initial_photo_url: newInitialPhotoUrl.trim() || null,
-			created_at: new Date().toISOString().split('T')[0],
-			updated_at: new Date().toISOString().split('T')[0],
-			stage_logs: [],
-			glaze_layers: []
-		};
-		pieces = [created, ...pieces];
-		newTitle = '';
-		newDescription = '';
-		newWeightAmount = null;
-		newInitialPhotoUrl = '';
-		isNewPieceModalOpen = false;
 	}
 
 	function addGlazeTagToPiece() {
@@ -721,119 +1146,261 @@
 
 					<!-- Cards Column -->
 					<div class="space-y-3 flex-1 overflow-y-auto snap-y snap-mandatory scroll-smooth max-h-[720px] pr-1" role="list">
-						{#each columnPieces as piece}
-							<div 
-								role="listitem"
-								aria-grabbed={draggedPieceId === piece.id}
-								draggable="true"
-								ondragstart={(e) => handleDragStart(e, piece.id)}
-								ondragend={handleDragEnd}
-								class="ceramic-card snap-start p-3.5 rounded-xl border border-stone-200 dark:border-stone-800/90 hover:border-[#E07A5F]/50 transition group relative space-y-3 cursor-grab active:cursor-grabbing {draggedPieceId === piece.id ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''}"
-							>
-								<!-- Thumbnail / Photo -->
-								{#if piece.initial_photo_url}
-									<div class="w-full h-32 rounded-lg overflow-hidden relative bg-stone-100 dark:bg-stone-950 border border-stone-200 dark:border-stone-800">
-										<img src={piece.initial_photo_url} alt={piece.title} class="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
-										<span class="absolute bottom-2 left-2 text-[10px] font-bold bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-white border border-white/10">
-											{piece.piece_type}
-										</span>
-									</div>
-								{/if}
+						{#each getStageCardGroups(stageInfo.id) as group}
+							{@const groupKey = group.isBatch ? group.batchId! : group.primaryPiece.id}
+							{@const isCardHovered = dragOverCardGroupKey === groupKey}
+							{#if group.isBatch}
+								<!-- STRAIGHTENED DIAGONAL STACKED CARD CONTAINER -->
+								<div 
+									role="region"
+									aria-label="Stacked batch card"
+									class="relative group/stack my-1 mr-2 mb-2 transition-transform duration-200 {isCardHovered ? 'scale-[1.03]' : ''}"
+									ondragover={(e) => handleCardDragOver(e, group)}
+									ondragleave={(e) => handleCardDragLeave(e, group)}
+									ondrop={(e) => handleCardDrop(e, group)}
+								>
+									<!-- Stack Layer 3 (Deepest diagonal offset card) -->
+									<div class="absolute inset-0 translate-x-3 translate-y-3 bg-stone-300/80 dark:bg-stone-950/80 rounded-xl border border-stone-400/40 dark:border-stone-800 shadow-md transition-transform duration-300 group-hover/stack:translate-x-4 group-hover/stack:translate-y-4 pointer-events-none"></div>
 
-								<!-- Piece Header & Cone -->
-								<div class="flex items-start justify-between gap-2">
-									<div class="flex-1 min-w-0">
-										<div class="flex items-center gap-1.5">
-											<GripVertical class="w-3.5 h-3.5 text-stone-400 dark:text-stone-600 group-hover:text-stone-600 dark:group-hover:text-stone-400 cursor-grab active:cursor-grabbing flex-shrink-0 transition" />
-											<h4 class="font-display font-bold text-sm text-stone-900 dark:text-stone-100 group-hover:text-[#E07A5F] transition leading-snug truncate">
-												{piece.title}
-											</h4>
+									<!-- Stack Layer 2 (Middle diagonal offset card) -->
+									<div class="absolute inset-0 translate-x-1.5 translate-y-1.5 bg-stone-200/90 dark:bg-stone-900/90 rounded-xl border border-stone-300 dark:border-stone-700 shadow-xs transition-transform duration-300 group-hover/stack:translate-x-2 group-hover/stack:translate-y-2 pointer-events-none"></div>
+
+									<!-- Front Primary Batch Card -->
+									<div 
+										role="listitem"
+										aria-grabbed={draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}`}
+										draggable="true"
+										ondragstart={(e) => handleBatchDragStart(e, group.batchId!, stageInfo.id, group.glazeSignature || '')}
+										ondragend={handleDragEnd}
+										class="relative z-10 ceramic-card snap-start p-3.5 rounded-xl border border-stone-300/90 dark:border-stone-700 bg-gradient-to-br from-stone-50 via-white to-stone-100/90 dark:from-stone-900 dark:via-stone-900 dark:to-stone-950 border-l-4 border-l-[#E07A5F] hover:border-r-[#E07A5F]/50 transition group space-y-3 cursor-grab active:cursor-grabbing shadow-lg {draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}` ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''} {isCardHovered ? 'ring-2 ring-[#E07A5F] border-[#E07A5F] bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20' : ''}"
+									>
+										<!-- Merge Hover Highlight Banner -->
+										{#if isCardHovered}
+											<div class="bg-[#E07A5F] text-white text-[10px] font-extrabold px-2.5 py-1 rounded-md text-center shadow-md animate-pulse flex items-center justify-center gap-1">
+												<Layers2 class="w-3.5 h-3.5" />
+												<span>Drop card to merge into batch!</span>
+											</div>
+										{/if}
+
+										<!-- Stacked Visual Indicator Badge -->
+										<div class="flex items-center justify-between">
+											<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#E07A5F]/20 dark:bg-[#E07A5F]/25 text-[#C85A32] dark:text-[#E07A5F] border border-[#E07A5F]/40 text-[10px] font-extrabold tracking-wide shadow-2xs">
+												<Layers2 class="w-3.5 h-3.5" />
+												<span>{group.pieces.length} PCS STACK</span>
+											</div>
+											<span class="cone-badge cone-6 text-[9px] px-1.5 py-0.5 flex-shrink-0">
+												{group.primaryPiece.target_glaze_cone}
+											</span>
 										</div>
-										<div class="flex items-center gap-1.5 flex-wrap text-[11px] text-[#3B7258] dark:text-[#81B29A] font-medium mt-0.5 ml-5">
-											<span>{piece.clay_body_name}</span>
-											{#if piece.weight_grams}
-												<span class="text-[10px] px-1.5 py-0.2 rounded bg-[#3B7258]/15 text-[#3B7258] dark:text-[#81B29A] font-bold border border-[#3B7258]/20">
-													{formatClayWeight(piece.weight_grams)}
+
+										<!-- Thumbnail / Photo -->
+										{#if group.primaryPiece.initial_photo_url}
+											<div class="w-full h-28 rounded-lg overflow-hidden relative bg-stone-100 dark:bg-stone-950 border border-stone-200 dark:border-stone-800">
+												<img src={group.primaryPiece.initial_photo_url} alt={group.batchTitle} class="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+												<span class="absolute bottom-2 left-2 text-[10px] font-bold bg-black/75 backdrop-blur-md px-2 py-0.5 rounded text-white border border-white/10 flex items-center gap-1">
+													<Boxes class="w-3 h-3 text-[#E07A5F]" />
+													<span>{group.primaryPiece.piece_type} Stack</span>
 												</span>
+											</div>
+										{/if}
+
+										<!-- Batch Card Header & Info -->
+										<div class="space-y-1">
+											<div class="flex items-center gap-1.5">
+												<GripVertical class="w-3.5 h-3.5 text-stone-400 dark:text-stone-600 group-hover:text-stone-600 dark:group-hover:text-stone-400 cursor-grab active:cursor-grabbing flex-shrink-0 transition" />
+												<h4 class="font-display font-extrabold text-sm text-stone-900 dark:text-stone-100 group-hover:text-[#E07A5F] transition leading-snug truncate">
+													{group.batchTitle}
+												</h4>
+											</div>
+											<div class="flex items-center gap-1.5 flex-wrap text-[11px] text-[#3B7258] dark:text-[#81B29A] font-medium ml-5">
+												<span>{group.primaryPiece.clay_body_name}</span>
+												{#if group.primaryPiece.weight_grams}
+													<span class="text-[10px] px-1.5 py-0.2 rounded bg-[#3B7258]/15 text-[#3B7258] dark:text-[#81B29A] font-bold border border-[#3B7258]/20">
+														{formatClayWeight(group.primaryPiece.weight_grams)}/ea
+													</span>
+												{/if}
+											</div>
+										</div>
+
+										<!-- Tagged Glazes on Batch -->
+										{#if group.primaryPiece.glaze_layers && group.primaryPiece.glaze_layers.length > 0}
+											<div class="pt-2 border-t border-stone-200 dark:border-stone-800/80 space-y-1">
+												<span class="text-[10px] font-semibold text-stone-500 dark:text-stone-400 block">Batch Glaze:</span>
+												<div class="flex flex-col gap-1">
+													{#each group.primaryPiece.glaze_layers as gl}
+														<div class="text-[10px] font-medium px-2 py-0.5 rounded bg-stone-100 dark:bg-stone-950/80 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-800 flex items-center justify-between">
+															<div class="flex items-center gap-1 truncate">
+																<span class="px-1 py-0.2 text-[8.5px] font-bold rounded bg-[#E07A5F]/15 text-[#C85A32] dark:text-[#E07A5F]">
+																	{gl.manufacturer}
+																</span>
+																<span class="truncate font-semibold">{gl.glaze_name}</span>
+															</div>
+															<span class="text-[8.5px] text-stone-500 dark:text-stone-400 capitalize">{gl.coat_count}c</span>
+														</div>
+													{/each}
+												</div>
+											</div>
+										{/if}
+
+										<!-- Batch Action Bar -->
+										<div class="pt-2.5 border-t border-stone-200 dark:border-stone-800/80 flex items-center justify-between text-xs gap-1.5">
+											<div class="flex items-center gap-1">
+												<button 
+													onclick={() => selectedPiece = group.primaryPiece}
+													class="p-1 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
+													title="View Details"
+												>
+													<Info class="w-3.5 h-3.5" />
+												</button>
+
+												<button 
+													onclick={() => openSplitBatchModal(group.batchId!, stageInfo.id)}
+													class="px-2 py-1 bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-300 font-bold rounded text-[10px] border border-amber-500/30 flex items-center gap-1 transition"
+													title="Split Batch or Glaze Jobs Separately"
+												>
+													<GitFork class="w-3 h-3 text-amber-600 dark:text-amber-400" />
+													<span>Split Jobs</span>
+												</button>
+											</div>
+
+											{#if stageInfo.id !== 'done'}
+												<button 
+													onclick={() => advanceBatchGroupStage(group)}
+													class="text-[10px] font-bold text-[#3B7258] dark:text-[#81B29A] hover:text-stone-900 dark:hover:text-white flex items-center gap-1 transition px-2 py-1 rounded bg-[#81B29A]/15 hover:bg-[#81B29A]/25 border border-[#81B29A]/30"
+												>
+													<span>Next ({group.pieces.length})</span>
+													<ArrowRight class="w-3 h-3" />
+												</button>
 											{/if}
 										</div>
-										{#if piece.notes || piece.description}
-											<p class="text-[10px] text-stone-500 dark:text-stone-400 italic mt-1 ml-5 line-clamp-2">
-												"{piece.notes || piece.description}"
-											</p>
+									</div>
+								</div>
+							{:else}
+								<!-- SINGLE PIECE CARD -->
+								{@const piece = group.primaryPiece}
+								<div 
+									role="listitem"
+									aria-grabbed={draggedPieceId === piece.id}
+									draggable="true"
+									ondragstart={(e) => handleDragStart(e, piece.id)}
+									ondragend={handleDragEnd}
+									ondragover={(e) => handleCardDragOver(e, group)}
+									ondragleave={(e) => handleCardDragLeave(e, group)}
+									ondrop={(e) => handleCardDrop(e, group)}
+									class="ceramic-card snap-start p-3.5 rounded-xl border border-stone-200 dark:border-stone-800/90 hover:border-[#E07A5F]/50 transition group relative space-y-3 cursor-grab active:cursor-grabbing {draggedPieceId === piece.id ? 'opacity-40 scale-95 border-dashed border-[#E07A5F]' : ''} {isCardHovered ? 'ring-2 ring-[#E07A5F] border-[#E07A5F] bg-[#E07A5F]/15 dark:bg-[#E07A5F]/20 scale-[1.02]' : ''}"
+								>
+									<!-- Merge Hover Highlight Banner -->
+									{#if isCardHovered}
+										<div class="bg-[#E07A5F] text-white text-[10px] font-extrabold px-2.5 py-1 rounded-md text-center shadow-md animate-pulse flex items-center justify-center gap-1">
+											<Layers2 class="w-3.5 h-3.5" />
+											<span>Drop card to merge into batch!</span>
+										</div>
+									{/if}
+									<!-- Thumbnail / Photo -->
+									{#if piece.initial_photo_url}
+										<div class="w-full h-32 rounded-lg overflow-hidden relative bg-stone-100 dark:bg-stone-950 border border-stone-200 dark:border-stone-800">
+											<img src={piece.initial_photo_url} alt={piece.title} class="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+											<span class="absolute bottom-2 left-2 text-[10px] font-bold bg-black/70 backdrop-blur-md px-2 py-0.5 rounded text-white border border-white/10">
+												{piece.piece_type}
+											</span>
+										</div>
+									{/if}
+
+									<!-- Piece Header & Cone -->
+									<div class="flex items-start justify-between gap-2">
+										<div class="flex-1 min-w-0">
+											<div class="flex items-center gap-1.5">
+												<GripVertical class="w-3.5 h-3.5 text-stone-400 dark:text-stone-600 group-hover:text-stone-600 dark:group-hover:text-stone-400 cursor-grab active:cursor-grabbing flex-shrink-0 transition" />
+												<h4 class="font-display font-bold text-sm text-stone-900 dark:text-stone-100 group-hover:text-[#E07A5F] transition leading-snug truncate">
+													{piece.title}
+												</h4>
+											</div>
+											<div class="flex items-center gap-1.5 flex-wrap text-[11px] text-[#3B7258] dark:text-[#81B29A] font-medium mt-0.5 ml-5">
+												<span>{piece.clay_body_name}</span>
+												{#if piece.weight_grams}
+													<span class="text-[10px] px-1.5 py-0.2 rounded bg-[#3B7258]/15 text-[#3B7258] dark:text-[#81B29A] font-bold border border-[#3B7258]/20">
+														{formatClayWeight(piece.weight_grams)}
+													</span>
+												{/if}
+											</div>
+											{#if piece.notes || piece.description}
+												<p class="text-[10px] text-stone-500 dark:text-stone-400 italic mt-1 ml-5 line-clamp-2">
+													"{piece.notes || piece.description}"
+												</p>
+											{/if}
+										</div>
+										<span class="cone-badge cone-6 text-[9px] px-1.5 py-0.5 flex-shrink-0">
+											{piece.target_glaze_cone}
+										</span>
+									</div>
+
+									<!-- Tagged Glazes -->
+									{#if piece.glaze_layers && piece.glaze_layers.length > 0}
+										<div class="pt-2 border-t border-stone-200 dark:border-stone-800/80 space-y-1.5">
+											<span class="text-[10px] font-semibold text-stone-500 dark:text-stone-400 block">Tagged Glazes:</span>
+											<div class="flex flex-col gap-1">
+												{#each piece.glaze_layers as gl}
+													<div class="text-[10px] font-medium px-2 py-1 rounded bg-stone-100 dark:bg-stone-950/80 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-800 flex items-center justify-between">
+														<div class="flex items-center gap-1.5 truncate">
+															<span class="px-1 py-0.2 text-[9px] font-bold rounded bg-[#E07A5F]/15 text-[#C85A32] dark:text-[#E07A5F]">
+																{gl.manufacturer}
+															</span>
+															<span class="truncate font-semibold">{gl.glaze_name}</span>
+														</div>
+														<span class="text-[9px] text-stone-500 dark:text-stone-400 capitalize flex items-center gap-1">
+															<span>{gl.coat_count}c ({gl.application_method})</span>
+															{#if gl.location}
+																<span class="px-1 py-0.2 rounded bg-stone-200 dark:bg-stone-800 text-[8.5px] font-semibold text-stone-700 dark:text-stone-300">
+																	{gl.location}
+																</span>
+															{/if}
+														</span>
+													</div>
+												{/each}
+											</div>
+										</div>
+									{/if}
+
+									<!-- Card Action Bar -->
+									<div class="pt-3 border-t border-stone-200 dark:border-stone-800/80 flex items-center justify-between text-xs">
+										<div class="flex items-center gap-1.5">
+											<button 
+												onclick={() => selectedPiece = piece}
+												class="p-1.5 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
+												title="Glazes & Photo History"
+											>
+												<Info class="w-3.5 h-3.5" />
+											</button>
+
+											<button 
+												onclick={() => duplicatePiece(piece)}
+												class="p-1.5 text-stone-500 dark:text-stone-400 hover:text-[#E07A5F] rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
+												title="Duplicate Piece"
+											>
+												<Copy class="w-3.5 h-3.5" />
+											</button>
+
+											<button 
+												onclick={() => openFailModal(piece)}
+												class="p-1.5 text-stone-500 dark:text-stone-400 hover:text-red-500 rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
+												title="Flag as Failed"
+											>
+												<AlertCircle class="w-3.5 h-3.5" />
+											</button>
+										</div>
+
+										{#if piece.stage !== 'done'}
+											<button 
+												onclick={() => advancePieceStage(piece.id)}
+												class="text-[10px] font-bold text-[#3B7258] dark:text-[#81B29A] hover:text-stone-900 dark:hover:text-white flex items-center gap-1 transition px-2 py-1 rounded bg-[#81B29A]/15 hover:bg-[#81B29A]/25 border border-[#81B29A]/30"
+											>
+												<span>Next Stage</span>
+												<ArrowRight class="w-3 h-3" />
+											</button>
 										{/if}
 									</div>
-									<span class="cone-badge cone-6 text-[9px] px-1.5 py-0.5 flex-shrink-0">
-										{piece.target_glaze_cone}
-									</span>
 								</div>
-
-								<!-- Tagged Glazes -->
-								{#if piece.glaze_layers && piece.glaze_layers.length > 0}
-									<div class="pt-2 border-t border-stone-200 dark:border-stone-800/80 space-y-1.5">
-										<span class="text-[10px] font-semibold text-stone-500 dark:text-stone-400 block">Tagged Glazes:</span>
-										<div class="flex flex-col gap-1">
-											{#each piece.glaze_layers as gl}
-												<div class="text-[10px] font-medium px-2 py-1 rounded bg-stone-100 dark:bg-stone-950/80 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-800 flex items-center justify-between">
-													<div class="flex items-center gap-1.5 truncate">
-														<span class="px-1 py-0.2 text-[9px] font-bold rounded bg-[#E07A5F]/15 text-[#C85A32] dark:text-[#E07A5F]">
-															{gl.manufacturer}
-														</span>
-														<span class="truncate font-semibold">{gl.glaze_name}</span>
-													</div>
-													<span class="text-[9px] text-stone-500 dark:text-stone-400 capitalize flex items-center gap-1">
-														<span>{gl.coat_count}c ({gl.application_method})</span>
-														{#if gl.location}
-															<span class="px-1 py-0.2 rounded bg-stone-200 dark:bg-stone-800 text-[8.5px] font-semibold text-stone-700 dark:text-stone-300">
-																{gl.location}
-															</span>
-														{/if}
-													</span>
-												</div>
-											{/each}
-										</div>
-									</div>
-								{/if}
-
-								<!-- Card Action Bar -->
-								<div class="pt-3 border-t border-stone-200 dark:border-stone-800/80 flex items-center justify-between text-xs">
-									<div class="flex items-center gap-1.5">
-										<button 
-											onclick={() => selectedPiece = piece}
-											class="p-1.5 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
-											title="Glazes & Photo History"
-										>
-											<Info class="w-3.5 h-3.5" />
-										</button>
-
-										<button 
-											onclick={() => duplicatePiece(piece)}
-											class="p-1.5 text-stone-500 dark:text-stone-400 hover:text-[#E07A5F] rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
-											title="Duplicate Piece"
-										>
-											<Copy class="w-3.5 h-3.5" />
-										</button>
-
-										<button 
-											onclick={() => openFailModal(piece)}
-											class="p-1.5 text-stone-500 dark:text-stone-400 hover:text-red-500 rounded hover:bg-stone-200 dark:hover:bg-stone-800 transition"
-											title="Flag as Failed"
-										>
-											<AlertCircle class="w-3.5 h-3.5" />
-										</button>
-									</div>
-
-									{#if piece.stage !== 'done'}
-										<button 
-											onclick={() => advancePieceStage(piece.id)}
-											class="text-[10px] font-bold text-[#3B7258] dark:text-[#81B29A] hover:text-stone-900 dark:hover:text-white flex items-center gap-1 transition px-2 py-1 rounded bg-[#81B29A]/15 hover:bg-[#81B29A]/25 border border-[#81B29A]/30"
-										>
-											<span>Next Stage</span>
-											<ArrowRight class="w-3 h-3" />
-										</button>
-									{/if}
-								</div>
-							</div>
+							{/if}
 						{/each}
 
 						{#if columnPieces.length === 0}
@@ -878,6 +1445,37 @@
 						class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100 focus:outline-none focus:border-[#E07A5F]"
 						required
 					/>
+				</div>
+
+				<!-- MULTI-PIECE BATCH CREATION INPUTS -->
+				<div class="grid grid-cols-2 gap-4 bg-amber-500/10 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-500/30">
+					<div class="space-y-1.5">
+						<label for="piece-qty" class="text-stone-800 dark:text-stone-200 font-bold flex items-center gap-1">
+							<Layers2 class="w-3.5 h-3.5 text-[#E07A5F]" />
+							<span>Quantity (Duplicate Pieces)</span>
+						</label>
+						<input 
+							id="piece-qty"
+							type="number" 
+							min="1"
+							max="50"
+							bind:value={newQuantity}
+							class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100 font-bold focus:outline-none focus:border-[#E07A5F]"
+						/>
+					</div>
+
+					{#if newQuantity > 1}
+						<div class="space-y-1.5">
+							<label for="batch-title-input" class="text-stone-800 dark:text-stone-200 font-bold">Batch Title (Optional)</label>
+							<input 
+								id="batch-title-input"
+								type="text" 
+								bind:value={newBatchTitle}
+								placeholder="e.g. 6x Espresso Mug Batch"
+								class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2.5 text-stone-900 dark:text-stone-100 focus:outline-none focus:border-[#E07A5F]"
+							/>
+						</div>
+					{/if}
 				</div>
 
 				<div class="grid grid-cols-2 gap-4">
@@ -1654,6 +2252,140 @@
 					class="px-4 py-2 bg-red-700 hover:bg-red-800 dark:bg-red-800 dark:hover:bg-red-700 text-white font-bold rounded-lg shadow"
 				>
 					Flag as Failed
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- MODAL 6: SPLIT BATCH / DIVERGE JOBS -->
+{#if isSplitModalOpen}
+	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+		<div class="ceramic-card max-w-xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+			<div class="flex items-start justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
+				<div>
+					<div class="flex items-center gap-2">
+						<GitFork class="w-5 h-5 text-amber-500" />
+						<h3 class="font-display font-bold text-lg text-stone-900 dark:text-white">Split Batch & Diverge Jobs</h3>
+					</div>
+					<p class="text-xs text-stone-500 dark:text-stone-400 mt-1">
+						Splitting batch: <strong class="text-stone-800 dark:text-stone-200">{splitTargetBatchTitle}</strong> ({splitBatchPieces.length} active pieces)
+					</p>
+				</div>
+				<button onclick={() => isSplitModalOpen = false} class="text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white">
+					<X class="w-5 h-5" />
+				</button>
+			</div>
+
+			<!-- Piece Selection Section -->
+			<div class="space-y-3 text-xs">
+				<div class="flex items-center justify-between">
+					<span class="font-bold text-stone-700 dark:text-stone-300">
+						Select Pieces to Split ({splitSelectedPieceIds.length} of {splitBatchPieces.length} selected):
+					</span>
+					<div class="flex items-center gap-2">
+						<button type="button" onclick={selectAllSplitPieces} class="text-[11px] text-[#E07A5F] hover:underline font-semibold">Select All</button>
+						<span class="text-stone-400">•</span>
+						<button type="button" onclick={deselectAllSplitPieces} class="text-[11px] text-stone-500 hover:underline font-semibold">Clear</button>
+					</div>
+				</div>
+
+				<div class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-stone-100 dark:bg-stone-950 rounded-xl border border-stone-200 dark:border-stone-800">
+					{#each splitBatchPieces as p}
+						<label class="flex items-center gap-2.5 p-2 rounded-lg bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 cursor-pointer hover:border-[#E07A5F] transition text-stone-900 dark:text-stone-100">
+							<input 
+								type="checkbox" 
+								checked={splitSelectedPieceIds.includes(p.id)}
+								onchange={() => toggleSplitSelection(p.id)}
+								class="rounded text-[#E07A5F] focus:ring-[#E07A5F]"
+							/>
+							<span class="font-semibold truncate">{p.title}</span>
+						</label>
+					{/each}
+				</div>
+			</div>
+
+			<!-- Action Options -->
+			<div class="space-y-4 text-xs pt-2 border-t border-stone-200 dark:border-stone-800">
+				<span class="font-bold text-stone-700 dark:text-stone-300 block">Choose Action for Selected Pieces:</span>
+
+				<div class="grid grid-cols-3 gap-3">
+					<button 
+						type="button"
+						onclick={() => splitAction = 'new_batch'}
+						class="p-3 rounded-xl border text-left transition flex flex-col gap-1 {splitAction === 'new_batch' ? 'border-[#E07A5F] bg-[#E07A5F]/10 dark:bg-[#E07A5F]/20 text-[#C85A32] dark:text-[#E07A5F] font-bold' : 'border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300'}"
+					>
+						<span class="flex items-center gap-1.5 font-bold">
+							<GitFork class="w-4 h-4" />
+							<span>Split into Sub-Batch</span>
+						</span>
+						<span class="text-[10px] text-stone-500 dark:text-stone-400 font-normal">Separate into a new sibling batch group</span>
+					</button>
+
+					<button 
+						type="button"
+						onclick={() => splitAction = 'detach'}
+						class="p-3 rounded-xl border text-left transition flex flex-col gap-1 {splitAction === 'detach' ? 'border-amber-500 bg-amber-500/10 text-amber-800 dark:text-amber-300 font-bold' : 'border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300'}"
+					>
+						<span class="flex items-center gap-1.5 font-bold">
+							<Boxes class="w-4 h-4" />
+							<span>Detach as Standalone</span>
+						</span>
+						<span class="text-[10px] text-stone-500 dark:text-stone-400 font-normal">Make pieces individual (remove batch link)</span>
+					</button>
+
+					<button 
+						type="button"
+						onclick={() => splitAction = 'fail'}
+						class="p-3 rounded-xl border text-left transition flex flex-col gap-1 {splitAction === 'fail' ? 'border-red-500 bg-red-500/10 text-red-700 dark:text-red-300 font-bold' : 'border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300'}"
+					>
+						<span class="flex items-center gap-1.5 font-bold">
+							<AlertCircle class="w-4 h-4 text-red-500" />
+							<span>Mark as Failed</span>
+						</span>
+						<span class="text-[10px] text-stone-500 dark:text-stone-400 font-normal">Flag selected items failed without ruining batch</span>
+					</button>
+				</div>
+
+				<!-- Dynamic Action Inputs -->
+				{#if splitAction === 'new_batch'}
+					<div class="p-3 bg-stone-100 dark:bg-stone-950 rounded-xl border border-stone-200 dark:border-stone-800 space-y-1.5">
+						<label for="split-subbatch-title" class="text-stone-700 dark:text-stone-300 font-semibold">Sub-Batch Title</label>
+						<input 
+							id="split-subbatch-title"
+							type="text" 
+							bind:value={splitNewSubBatchTitle}
+							class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 focus:outline-none focus:border-[#E07A5F]"
+						/>
+					</div>
+				{:else if splitAction === 'fail'}
+					<div class="p-3 bg-red-50 dark:bg-red-950/30 rounded-xl border border-red-200 dark:border-red-900/40 space-y-1.5">
+						<label for="split-fail-reason" class="text-red-700 dark:text-red-300 font-semibold">Failure Reason</label>
+						<input 
+							id="split-fail-reason"
+							type="text" 
+							bind:value={splitFailReason}
+							placeholder="e.g. S-crack in foot during drying, handle cracked off..."
+							class="w-full bg-white dark:bg-stone-900 border border-red-300 dark:border-red-900/50 rounded-lg p-2 text-stone-900 dark:text-stone-100 focus:outline-none"
+						/>
+					</div>
+				{/if}
+			</div>
+
+			<div class="pt-4 border-t border-stone-200 dark:border-stone-800 flex justify-end gap-3 text-xs">
+				<button 
+					type="button" 
+					onclick={() => isSplitModalOpen = false}
+					class="px-4 py-2 bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 font-semibold rounded-lg"
+				>
+					Cancel
+				</button>
+				<button 
+					type="button" 
+					onclick={executeSplitBatch}
+					class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow"
+				>
+					Execute Split ({splitSelectedPieceIds.length} pcs)
 				</button>
 			</div>
 		</div>

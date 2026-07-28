@@ -59,6 +59,16 @@ export interface ClayBody {
 	notes?: string;
 }
 
+export interface PieceBatch {
+	id: string;
+	user_id: string;
+	title: string;
+	description?: string | null;
+	parent_batch_id?: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
 export interface CeramicPiece {
 	id: string;
 	user_id: string;
@@ -69,6 +79,11 @@ export interface CeramicPiece {
 	clay_body_id?: string | null;
 	clay_body_name?: string | null;
 	stage: CeramicStage;
+	
+	// Batch tracking
+	batch_id?: string | null;
+	batch_sequence?: number | null;
+	batch?: PieceBatch | null;
 	
 	// Failure tracking
 	is_failed: boolean;
