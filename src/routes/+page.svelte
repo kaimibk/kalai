@@ -906,12 +906,37 @@
 			}
 		};
 
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				if (isFailModalOpen) {
+					isFailModalOpen = false;
+				} else if (isDuplicateModalOpen) {
+					isDuplicateModalOpen = false;
+				} else if (isSplitModalOpen) {
+					isSplitModalOpen = false;
+				} else if (isNewPieceModalOpen) {
+					isNewPieceModalOpen = false;
+				} else if (showGlazeLibraryModal) {
+					showGlazeLibraryModal = false;
+				} else if (showClayLibraryModal) {
+					showClayLibraryModal = false;
+				} else if (showPyrometricChartModal) {
+					showPyrometricChartModal = false;
+				} else if (isMobileFilterDrawerOpen) {
+					isMobileFilterDrawerOpen = false;
+				} else if (selectedPiece) {
+					selectedPiece = null;
+				}
+			}
+		};
+
 		window.addEventListener('pointermove', onMove, { passive: false });
 		window.addEventListener('touchmove', onTouchMove, { passive: false });
 		window.addEventListener('pointerup', onUp);
 		window.addEventListener('pointercancel', onCancel);
 		window.addEventListener('blur', onCancel);
 		window.addEventListener('dragend', onCancel);
+		window.addEventListener('keydown', onKeyDown);
 		return () => {
 			window.removeEventListener('pointermove', onMove);
 			window.removeEventListener('touchmove', onTouchMove);
@@ -919,6 +944,7 @@
 			window.removeEventListener('pointercancel', onCancel);
 			window.removeEventListener('blur', onCancel);
 			window.removeEventListener('dragend', onCancel);
+			window.removeEventListener('keydown', onKeyDown);
 		};
 	});
 
@@ -2968,7 +2994,14 @@
 
 <!-- MOBILE FILTER DRAWER MODAL -->
 {#if isMobileFilterDrawerOpen}
-	<div class="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs transition-opacity duration-300">
+	<div 
+		role="dialog" 
+		aria-modal="true"
+		tabindex="-1"
+		onclick={(e) => { if (e.target === e.currentTarget) isMobileFilterDrawerOpen = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') isMobileFilterDrawerOpen = false; }}
+		class="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs transition-opacity duration-300 cursor-pointer"
+	>
 		<div class="w-full max-w-sm bg-white dark:bg-stone-900 h-full flex flex-col shadow-2xl border-l border-stone-200 dark:border-stone-800">
 			<!-- Drawer Header -->
 			<div class="p-4 border-b border-stone-200 dark:border-stone-800 flex items-center justify-between bg-stone-50 dark:bg-stone-950/50">
@@ -3185,7 +3218,14 @@
 
 <!-- MODAL 1: CREATE NEW CERAMIC PIECE -->
 {#if isNewPieceModalOpen}
-	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+	<div 
+		role="dialog" 
+		aria-modal="true"
+		tabindex="-1"
+		onclick={(e) => { if (e.target === e.currentTarget) isNewPieceModalOpen = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') isNewPieceModalOpen = false; }}
+		class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+	>
 		<div class="ceramic-card max-w-lg w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6">
 			<div class="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div class="flex items-center gap-2">
@@ -3460,7 +3500,14 @@
 
 <!-- MODAL 2: PIECE GLAZE TAGGING & PHOTO HISTORY -->
 {#if selectedPiece}
-	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+	<div 
+		role="dialog" 
+		aria-modal="true"
+		tabindex="-1"
+		onclick={(e) => { if (e.target === e.currentTarget) selectedPiece = null; }}
+		onkeydown={(e) => { if (e.key === 'Escape') selectedPiece = null; }}
+		class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+	>
 		<div class="ceramic-card max-w-2xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto touch-pan-y">
 			<div class="flex items-start justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div>
@@ -4266,7 +4313,14 @@
 
 <!-- MODAL 3: GLAZE LIBRARY MANAGER -->
 {#if showGlazeLibraryModal}
-	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+	<div 
+		role="dialog" 
+		aria-modal="true"
+		tabindex="-1"
+		onclick={(e) => { if (e.target === e.currentTarget) showGlazeLibraryModal = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') showGlazeLibraryModal = false; }}
+		class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+	>
 		<div class="ceramic-card max-w-2xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto touch-pan-y">
 			<div class="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div class="flex items-center gap-2 text-stone-900 dark:text-white">
@@ -4374,7 +4428,14 @@
 
 <!-- MODAL 3.5: CLAY BODY LIBRARY MANAGER -->
 {#if showClayLibraryModal}
-	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+	<div 
+		role="dialog" 
+		aria-modal="true"
+		tabindex="-1"
+		onclick={(e) => { if (e.target === e.currentTarget) showClayLibraryModal = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') showClayLibraryModal = false; }}
+		class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+	>
 		<div class="ceramic-card max-w-2xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto touch-pan-y">
 			<div class="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div class="flex items-center gap-2 text-stone-900 dark:text-white">
@@ -4527,7 +4588,14 @@
 
 <!-- MODAL 4: FULL PYROMETRIC CONE TEMPERATURE EQUIVALENTS CHART -->
 {#if showPyrometricChartModal}
-	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+	<div 
+		role="dialog" 
+		aria-modal="true"
+		tabindex="-1"
+		onclick={(e) => { if (e.target === e.currentTarget) showPyrometricChartModal = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') showPyrometricChartModal = false; }}
+		class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+	>
 		<div class="ceramic-card max-w-3xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto touch-pan-y">
 			<div class="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div class="flex items-center gap-2 text-stone-900 dark:text-white">
@@ -4569,7 +4637,14 @@
 
 <!-- MODAL 5: FLAG PIECE AS FAILED / CRACKED -->
 {#if isFailModalOpen && pieceToFail}
-	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+	<div 
+		role="dialog" 
+		aria-modal="true"
+		tabindex="-1"
+		onclick={(e) => { if (e.target === e.currentTarget) isFailModalOpen = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') isFailModalOpen = false; }}
+		class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+	>
 		<div class="ceramic-card max-w-md w-full p-6 rounded-2xl border border-red-300 dark:border-red-900/50 shadow-2xl space-y-5">
 			<div class="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-3">
 				<div class="flex items-center gap-2 text-red-600 dark:text-red-400 font-display font-bold text-base">
@@ -4627,7 +4702,14 @@
 
 <!-- MODAL 5.5: DUPLICATE CERAMIC PIECE CONFIRMATION & EDIT -->
 {#if isDuplicateModalOpen && pieceToDuplicate}
-	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+	<div 
+		role="dialog" 
+		aria-modal="true"
+		tabindex="-1"
+		onclick={(e) => { if (e.target === e.currentTarget) isDuplicateModalOpen = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') isDuplicateModalOpen = false; }}
+		class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+	>
 		<div class="ceramic-card max-w-lg w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto touch-pan-y">
 			<div class="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div class="flex items-center gap-2">
@@ -4859,7 +4941,14 @@
 
 <!-- MODAL 6: SPLIT BATCH / DIVERGE JOBS -->
 {#if isSplitModalOpen}
-	<div class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+	<div 
+		role="dialog" 
+		aria-modal="true"
+		tabindex="-1"
+		onclick={(e) => { if (e.target === e.currentTarget) isSplitModalOpen = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') isSplitModalOpen = false; }}
+		class="fixed inset-0 z-50 bg-black/70 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+	>
 		<div class="ceramic-card max-w-xl w-full p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto touch-pan-y">
 			<div class="flex items-start justify-between border-b border-stone-200 dark:border-stone-800 pb-4">
 				<div>
