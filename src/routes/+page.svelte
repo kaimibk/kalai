@@ -525,7 +525,7 @@
 		selectedPiece = updatedPiece;
 		pieces = pieces.map(p => p.id === selectedPiece!.id ? updatedPiece : p);
 		editingDimensionMode = 'none';
-		showToast(`Updated goal dimensions & recalculated recommended wet target!`);
+		showToast(`Updated goal dimensions & recalculated recommended pre-fire target!`);
 	}
 
 	function saveActualFormedDimensions() {
@@ -549,7 +549,7 @@
 		selectedPiece = updatedPiece;
 		pieces = pieces.map(p => p.id === selectedPiece!.id ? updatedPiece : p);
 		editingDimensionMode = 'none';
-		showToast(`Saved actual measured formed dimensions!`);
+		showToast(`Saved actual measured pre-fire dimensions!`);
 	}
 
 	// Stage Log Add State (inside Detail Modal)
@@ -3200,10 +3200,10 @@
 							<div class="flex items-center justify-between font-bold text-[#3B7258] dark:text-[#81B29A]">
 								<span class="flex items-center gap-1">
 									<Sparkles class="w-3.5 h-3.5" />
-									<span>Recommended Wet Build Target (Pre-Shrinkage):</span>
+									<span>Recommended Pre-Fire Build Target (Pre-Shrinkage):</span>
 								</span>
 								<span class="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-[#3B7258]/20">
-									+{((1 / (1 - shrinkPct/100) - 1) * 100).toFixed(1)}% Build Target
+									+{((1 / (1 - shrinkPct/100) - 1) * 100).toFixed(1)}% Pre-Fire Target
 								</span>
 							</div>
 							<div class="font-mono text-xs font-extrabold text-stone-900 dark:text-stone-100">
@@ -3214,7 +3214,7 @@
 								{#if fHgt}<span>H: <strong class="text-[#E07A5F]">{fHgt} cm</strong></span>{/if}
 							</div>
 							<p class="text-[10px] text-stone-600 dark:text-stone-400 italic">
-								Form wet clay to these dimensions so it shrinks to your goal size after {shrinkPct}% {selectedClayForNewPiece ? selectedClayForNewPiece.name : 'clay'} shrinkage.
+								Form/trim clay to these pre-fire dimensions so it shrinks to your goal size after {shrinkPct}% {selectedClayForNewPiece ? selectedClayForNewPiece.name : 'clay'} shrinkage.
 							</p>
 						</div>
 					{/if}
@@ -3458,7 +3458,7 @@
 							{@const fWid = calculateFormedDimension(editingTargetWidth, selectedPieceShrinkPct)}
 							{@const fHgt = calculateFormedDimension(editingTargetHeight, selectedPieceShrinkPct)}
 							<div class="p-2 rounded-lg bg-[#3B7258]/10 border border-[#3B7258]/30 text-[11px] space-y-0.5">
-								<span class="font-bold text-[#3B7258] dark:text-[#81B29A] block">📐 Updated Recommended Wet Build Target:</span>
+								<span class="font-bold text-[#3B7258] dark:text-[#81B29A] block">📐 Updated Recommended Pre-Fire Target:</span>
 								<div class="font-mono text-xs font-extrabold text-stone-900 dark:text-stone-100">
 									{#if fLen}<span>L: <strong class="text-[#E07A5F]">{fLen} cm</strong></span>{/if}
 									{#if fLen && (fWid || fHgt)}<span class="text-stone-400"> × </span>{/if}
@@ -3487,16 +3487,16 @@
 						</div>
 					</div>
 				{:else if editingDimensionMode === 'actual_formed'}
-					<!-- EDIT ACTUAL MEASURED FORMED SIZE FORM -->
+					<!-- EDIT ACTUAL MEASURED PRE-FIRE SIZE FORM -->
 					<div class="space-y-3 pt-1 bg-white/80 dark:bg-stone-950/80 p-3 rounded-xl border border-stone-200 dark:border-stone-800">
 						<div class="flex items-center justify-between font-bold text-[#3B7258] dark:text-[#81B29A] text-xs">
-							<span>🏺 Record Actual Measured Wet Formed Size</span>
-							<span class="text-[10px] text-stone-500 font-normal">Measured after thrown/handbuilt</span>
+							<span>🏺 Record Actual Measured Pre-Fire Size</span>
+							<span class="text-[10px] text-stone-500 font-normal">Measured pre-fire (formed, trimmed, bone dry)</span>
 						</div>
 
 						<!-- Reference Recommended Size Banner -->
 						<div class="p-2 rounded-lg bg-[#3B7258]/10 border border-[#3B7258]/25 text-[11px] flex items-center justify-between">
-							<span class="font-semibold text-stone-700 dark:text-stone-300">📐 Recommended Target to Match:</span>
+							<span class="font-semibold text-stone-700 dark:text-stone-300">📐 Recommended Target (Pre-Fire):</span>
 							<span class="font-mono font-extrabold text-[#3B7258] dark:text-[#81B29A]">
 								{#if selectedPiece.formed_length_cm || selectedPiece.formed_width_cm || selectedPiece.formed_height_cm}
 									{#if selectedPiece.formed_length_cm}{selectedPiece.formed_length_cm}L{/if}{#if selectedPiece.formed_length_cm && (selectedPiece.formed_width_cm || selectedPiece.formed_height_cm)}×{/if}{#if selectedPiece.formed_width_cm}{selectedPiece.formed_width_cm}W{/if}{#if selectedPiece.formed_width_cm && selectedPiece.formed_height_cm}×{/if}{#if selectedPiece.formed_height_cm}{selectedPiece.formed_height_cm}H{/if}cm
@@ -3513,7 +3513,7 @@
 
 						<div class="grid grid-cols-3 gap-2">
 							<div class="space-y-1">
-								<label for="edit-formed-len" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Actual Formed L (cm)</label>
+								<label for="edit-formed-len" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Actual Pre-Fire L (cm)</label>
 								<input 
 									id="edit-formed-len"
 									type="number" 
@@ -3525,7 +3525,7 @@
 								/>
 							</div>
 							<div class="space-y-1">
-								<label for="edit-formed-wid" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Actual Formed W (cm)</label>
+								<label for="edit-formed-wid" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Actual Pre-Fire W (cm)</label>
 								<input 
 									id="edit-formed-wid"
 									type="number" 
@@ -3537,7 +3537,7 @@
 								/>
 							</div>
 							<div class="space-y-1">
-								<label for="edit-formed-hgt" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Actual Formed H (cm)</label>
+								<label for="edit-formed-hgt" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Actual Pre-Fire H (cm)</label>
 								<input 
 									id="edit-formed-hgt"
 									type="number" 
@@ -3621,7 +3621,7 @@
 						<div class="bg-[#3B7258]/10 dark:bg-[#3B7258]/20 p-3 rounded-xl border border-[#3B7258]/30 flex flex-col justify-between space-y-2">
 							<div>
 								<span class="text-[10px] font-bold uppercase tracking-wider text-[#3B7258] dark:text-[#81B29A] block mb-1">
-									📐 Recommended Wet Target
+									📐 Recommended Pre-Fire Target
 								</span>
 								{#if selectedPiece.formed_length_cm || selectedPiece.formed_width_cm || selectedPiece.formed_height_cm}
 									<div class="font-mono text-sm font-extrabold text-[#3B7258] dark:text-[#81B29A]">
@@ -3648,7 +3648,7 @@
 									<span class="text-stone-400 italic text-[11px]">Set goal size to view build target.</span>
 								{/if}
 							</div>
-							<span class="text-[9.5px] text-stone-500 dark:text-stone-400 italic">Build to this wet size to hit goal</span>
+							<span class="text-[9.5px] text-stone-500 dark:text-stone-400 italic">Pre-fire size to hit goal</span>
 						</div>
 
 						<!-- Card 3: Actual Measured Formed Size & Predicted Post-Firing Size -->
@@ -3656,7 +3656,7 @@
 							<div>
 								<div class="flex items-center justify-between mb-1">
 									<span class="text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
-										🏺 Actual Measured Wet Size
+										🏺 Actual Measured Pre-Fire Size
 									</span>
 									{#if selectedPiece.actual_formed_length_cm || selectedPiece.actual_formed_width_cm || selectedPiece.actual_formed_height_cm}
 										<button 
@@ -3696,11 +3696,11 @@
 										onclick={startEditActualFormedDimensions}
 										class="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 rounded font-bold text-[10px] transition cursor-pointer"
 									>
-										+ Record Measured Size
+										+ Record Pre-Fire Size
 									</button>
 								{/if}
 							</div>
-							<span class="text-[9.5px] text-stone-500 dark:text-stone-400 italic">Recorded after forming</span>
+							<span class="text-[9.5px] text-stone-500 dark:text-stone-400 italic">Measured before firing (formed, trimmed, bone dry)</span>
 						</div>
 					</div>
 				{/if}
