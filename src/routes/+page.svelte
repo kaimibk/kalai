@@ -35,6 +35,7 @@
 	import SlidersHorizontal from 'lucide-svelte/icons/sliders-horizontal';
 	import ChevronDown from 'lucide-svelte/icons/chevron-down';
 	import GripVertical from 'lucide-svelte/icons/grip-vertical';
+	import Ruler from 'lucide-svelte/icons/ruler';
 	import type { CeramicPiece, ClayBody, CeramicStage, PieceStageLog, PieceGlazeLayer, GlazeRecipe, GlazeStyle, GlazeLocation, PyrometricCone, Manufacturer, PieceType, PieceBatch } from '$lib/types/database';
 
 	function formatDateShort(dateVal?: Date | string | null): string {
@@ -159,6 +160,14 @@
 		}
 	}
 
+	function calculateFormedDimension(desiredCm: number | null | undefined, shrinkagePct: number): number | null {
+		if (desiredCm === null || desiredCm === undefined || isNaN(desiredCm) || desiredCm <= 0) return null;
+		if (shrinkagePct >= 100 || shrinkagePct < 0) return desiredCm;
+		const scale = 1 - (shrinkagePct / 100);
+		if (scale <= 0) return desiredCm;
+		return Math.round((desiredCm / scale) * 100) / 100;
+	}
+
 	// Streamlined 6-Stage Kanban Lifecycle
 	const STAGES: { id: CeramicStage; label: string; icon: string; color: string }[] = [
 		{ id: 'backlog', label: 'Backlog / To-Do', icon: '💡', color: 'border-yellow-500/30' },
@@ -216,6 +225,12 @@
 		weight_grams: 420,
 		height_cm: 9.5,
 		width_cm: 8.5,
+		target_length_cm: 8.5,
+		target_width_cm: 8.5,
+		target_height_cm: 9.5,
+		formed_length_cm: 9.66,
+		formed_width_cm: 9.66,
+		formed_height_cm: 10.80,
 		initial_photo_url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&auto=format&fit=crop&q=80',
 		started_at: new Date('2026-07-25T00:00:00'),
 		due_date: new Date('2026-08-10T00:00:00'),
@@ -244,6 +259,12 @@
 			weight_grams: 480,
 			height_cm: 8.5,
 			width_cm: 13.0,
+			target_length_cm: 13.0,
+			target_width_cm: 13.0,
+			target_height_cm: 8.5,
+			formed_length_cm: 14.77,
+			formed_width_cm: 14.77,
+			formed_height_cm: 9.66,
 			initial_photo_url: 'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?w=400&auto=format&fit=crop&q=80',
 			started_at: new Date('2026-07-22T00:00:00'),
 			due_date: new Date('2026-08-05T00:00:00'),
@@ -269,6 +290,12 @@
 			weight_grams: 210,
 			height_cm: 7.0,
 			width_cm: 8.0,
+			target_length_cm: 8.0,
+			target_width_cm: 8.0,
+			target_height_cm: 7.0,
+			formed_length_cm: 9.04,
+			formed_width_cm: 9.04,
+			formed_height_cm: 7.91,
 			initial_photo_url: 'https://images.unsplash.com/photo-1610701596007-11502861dcfa?w=400&auto=format&fit=crop&q=80',
 			started_at: new Date('2026-07-18T00:00:00'),
 			due_date: new Date('2026-07-30T00:00:00'),
@@ -297,6 +324,12 @@
 			weight_grams: 1200,
 			height_cm: 24.0,
 			width_cm: 11.0,
+			target_length_cm: 11.0,
+			target_width_cm: 11.0,
+			target_height_cm: 24.0,
+			formed_length_cm: 12.79,
+			formed_width_cm: 12.79,
+			formed_height_cm: 27.91,
 			initial_photo_url: null,
 			started_at: null,
 			due_date: new Date('2026-08-15T00:00:00'),
@@ -323,6 +356,12 @@
 			weight_grams: 850,
 			height_cm: 18.0,
 			width_cm: 12.0,
+			target_length_cm: 14.0,
+			target_width_cm: 12.0,
+			target_height_cm: 18.0,
+			formed_length_cm: 15.47,
+			formed_width_cm: 13.26,
+			formed_height_cm: 19.89,
 			initial_photo_url: null,
 			started_at: new Date('2026-07-20T00:00:00'),
 			due_date: null,
@@ -356,6 +395,12 @@
 	let newStage = $state<CeramicStage>('backlog');
 	let newQuantity = $state(1);
 	let newBatchTitle = $state('');
+	let newTargetLength = $state<number | null>(null);
+	let newTargetWidth = $state<number | null>(null);
+	let newTargetHeight = $state<number | null>(null);
+	let selectedClayForNewPiece = $derived(clayBodies.find(c => c.id === newClayBodyId));
+	let selectedPieceClay = $derived(selectedPiece ? clayBodies.find(c => c.id === selectedPiece?.clay_body_id || c.name === selectedPiece?.clay_body_name) : null);
+	let selectedPieceShrinkPct = $derived(selectedPieceClay ? selectedPieceClay.shrinkage_pct : 12.0);
 
 	// Job Splitting Modal State
 	let isSplitModalOpen = $state(false);
@@ -414,10 +459,50 @@
 	let duplicateDescription = $state('');
 	let duplicateQuantity = $state(1);
 	let duplicateCopyGlazes = $state(true);
+	let duplicateTargetLength = $state<number | null>(null);
+	let duplicateTargetWidth = $state<number | null>(null);
+	let duplicateTargetHeight = $state<number | null>(null);
 
-	// Piece Notes Inline Editing State
+	// Piece Detail Modal Editing State
 	let editingPieceNotes = $state('');
 	let isEditingNotes = $state(false);
+	let isEditingDimensions = $state(false);
+	let editingTargetLength = $state<number | null>(null);
+	let editingTargetWidth = $state<number | null>(null);
+	let editingTargetHeight = $state<number | null>(null);
+
+	function savePieceDimensions() {
+		if (!selectedPiece) return;
+		const clay = clayBodies.find(c => c.id === selectedPiece!.clay_body_id || c.name === selectedPiece!.clay_body_name);
+		const shrinkPct = clay ? clay.shrinkage_pct : 12.0;
+
+		const tLen = editingTargetLength && editingTargetLength > 0 ? editingTargetLength : null;
+		const tWid = editingTargetWidth && editingTargetWidth > 0 ? editingTargetWidth : null;
+		const tHgt = editingTargetHeight && editingTargetHeight > 0 ? editingTargetHeight : null;
+
+		const fLen = calculateFormedDimension(tLen, shrinkPct);
+		const fWid = calculateFormedDimension(tWid, shrinkPct);
+		const fHgt = calculateFormedDimension(tHgt, shrinkPct);
+
+		const updatedPiece: CeramicPiece = {
+			...selectedPiece,
+			target_length_cm: tLen,
+			target_width_cm: tWid,
+			target_height_cm: tHgt,
+			formed_length_cm: fLen,
+			formed_width_cm: fWid,
+			formed_height_cm: fHgt,
+			width_cm: fWid || selectedPiece.width_cm,
+			height_cm: fHgt || selectedPiece.height_cm,
+			length_cm: fLen || selectedPiece.length_cm,
+			updated_at: new Date()
+		};
+
+		selectedPiece = updatedPiece;
+		pieces = pieces.map(p => p.id === selectedPiece!.id ? updatedPiece : p);
+		isEditingDimensions = false;
+		showToast(`Updated dimensions & recalculated formed target!`);
+	}
 
 	// Stage Log Add State (inside Detail Modal)
 	let newLogNote = $state('');
@@ -484,10 +569,9 @@
 	}
 
 	function isInteractiveTarget(target: EventTarget | null): boolean {
-		if (!target || !(target instanceof HTMLElement)) return false;
-		const btn = target.closest('button, input, select, a, [role="button"]');
-		if (!btn) return false;
-		return btn.hasAttribute('data-action-button');
+		if (!target || !(target instanceof Element)) return false;
+		const btn = target.closest('button, input, select, a, textarea, [role="button"]');
+		return btn !== null;
 	}
 
 	function handlePointerDownPiece(e: PointerEvent, pieceId: string, label: string) {
@@ -1195,6 +1279,15 @@
 			? toGrams(newWeightAmount, newWeightUnit) 
 			: null;
 
+		const shrinkPct = selectedClay ? selectedClay.shrinkage_pct : 12.0;
+		const targetLen = newTargetLength && newTargetLength > 0 ? newTargetLength : null;
+		const targetWid = newTargetWidth && newTargetWidth > 0 ? newTargetWidth : null;
+		const targetHgt = newTargetHeight && newTargetHeight > 0 ? newTargetHeight : null;
+
+		const formedLen = calculateFormedDimension(targetLen, shrinkPct);
+		const formedWid = calculateFormedDimension(targetWid, shrinkPct);
+		const formedHgt = calculateFormedDimension(targetHgt, shrinkPct);
+
 		const qty = Math.max(1, Math.min(50, newQuantity));
 		const now = new Date();
 		const userDueDate = parseDateInput(newDueDate);
@@ -1229,6 +1322,15 @@
 				target_bisque_cone: newTargetBisqueCone,
 				target_glaze_cone: newTargetGlazeCone,
 				weight_grams: calculatedGrams,
+				target_length_cm: targetLen,
+				target_width_cm: targetWid,
+				target_height_cm: targetHgt,
+				formed_length_cm: formedLen,
+				formed_width_cm: formedWid,
+				formed_height_cm: formedHgt,
+				length_cm: formedLen || null,
+				width_cm: formedWid || targetWid || null,
+				height_cm: formedHgt || targetHgt || null,
 				initial_photo_url: newInitialPhotoUrl.trim() || null,
 				started_at: autoStartedAt,
 				due_date: userDueDate,
@@ -1255,6 +1357,15 @@
 				target_bisque_cone: newTargetBisqueCone,
 				target_glaze_cone: newTargetGlazeCone,
 				weight_grams: calculatedGrams,
+				target_length_cm: targetLen,
+				target_width_cm: targetWid,
+				target_height_cm: targetHgt,
+				formed_length_cm: formedLen,
+				formed_width_cm: formedWid,
+				formed_height_cm: formedHgt,
+				length_cm: formedLen || null,
+				width_cm: formedWid || targetWid || null,
+				height_cm: formedHgt || targetHgt || null,
 				initial_photo_url: newInitialPhotoUrl.trim() || null,
 				started_at: autoStartedAt,
 				due_date: userDueDate,
@@ -1274,6 +1385,9 @@
 		newDueDate = '';
 		newQuantity = 1;
 		newBatchTitle = '';
+		newTargetLength = null;
+		newTargetWidth = null;
+		newTargetHeight = null;
 		isNewPieceModalOpen = false;
 	}
 
@@ -1561,6 +1675,9 @@
 		duplicateDescription = piece.notes || piece.description || '';
 		duplicateQuantity = 1;
 		duplicateCopyGlazes = true;
+		duplicateTargetLength = piece.target_length_cm || piece.length_cm || null;
+		duplicateTargetWidth = piece.target_width_cm || piece.width_cm || null;
+		duplicateTargetHeight = piece.target_height_cm || piece.height_cm || null;
 		isDuplicateModalOpen = true;
 	}
 
@@ -1575,6 +1692,15 @@
 			? toGrams(duplicateWeightAmount, duplicateWeightUnit) 
 			: null;
 		const qty = Math.max(1, Math.min(50, duplicateQuantity));
+
+		const shrinkPct = selectedClay ? selectedClay.shrinkage_pct : 12.0;
+		const targetLen = duplicateTargetLength && duplicateTargetLength > 0 ? duplicateTargetLength : null;
+		const targetWid = duplicateTargetWidth && duplicateTargetWidth > 0 ? duplicateTargetWidth : null;
+		const targetHgt = duplicateTargetHeight && duplicateTargetHeight > 0 ? duplicateTargetHeight : null;
+
+		const formedLen = calculateFormedDimension(targetLen, shrinkPct);
+		const formedWid = calculateFormedDimension(targetWid, shrinkPct);
+		const formedHgt = calculateFormedDimension(targetHgt, shrinkPct);
 
 		const sourceGlazes = (duplicateCopyGlazes && pieceToDuplicate.glaze_layers)
 			? pieceToDuplicate.glaze_layers.map((g, idx) => ({ ...g, id: `gl-${Date.now()}-${idx}` }))
@@ -1608,6 +1734,15 @@
 				target_bisque_cone: duplicateTargetBisqueCone,
 				target_glaze_cone: duplicateTargetGlazeCone,
 				weight_grams: calculatedGrams,
+				target_length_cm: targetLen,
+				target_width_cm: targetWid,
+				target_height_cm: targetHgt,
+				formed_length_cm: formedLen,
+				formed_width_cm: formedWid,
+				formed_height_cm: formedHgt,
+				length_cm: formedLen || null,
+				width_cm: formedWid || targetWid || null,
+				height_cm: formedHgt || targetHgt || null,
 				initial_photo_url: pieceToDuplicate!.initial_photo_url,
 				started_at: autoStartedAt,
 				due_date: pieceToDuplicate!.due_date,
@@ -1634,6 +1769,15 @@
 				target_bisque_cone: duplicateTargetBisqueCone,
 				target_glaze_cone: duplicateTargetGlazeCone,
 				weight_grams: calculatedGrams,
+				target_length_cm: targetLen,
+				target_width_cm: targetWid,
+				target_height_cm: targetHgt,
+				formed_length_cm: formedLen,
+				formed_width_cm: formedWid,
+				formed_height_cm: formedHgt,
+				length_cm: formedLen || null,
+				width_cm: formedWid || targetWid || null,
+				height_cm: formedHgt || targetHgt || null,
 				initial_photo_url: pieceToDuplicate.initial_photo_url,
 				started_at: autoStartedAt,
 				due_date: pieceToDuplicate.due_date,
@@ -2946,6 +3090,90 @@
 					</select>
 				</div>
 
+				<!-- DESIRED GOAL DIMENSIONS & SHRINKAGE PREVIEW -->
+				<div class="space-y-2 p-3 bg-stone-100/90 dark:bg-stone-900/60 rounded-xl border border-stone-200 dark:border-stone-800">
+					<div class="flex items-center justify-between">
+						<label class="text-stone-800 dark:text-stone-200 font-bold flex items-center gap-1.5">
+							<Ruler class="w-3.5 h-3.5 text-[#E07A5F]" />
+							<span>Desired Goal Dimensions (Final Fired Size in cm)</span>
+						</label>
+						{#if selectedClayForNewPiece}
+							<span class="text-[10px] font-bold text-[#E07A5F] bg-white dark:bg-stone-950 px-2 py-0.5 rounded border border-[#E07A5F]/30">
+								Shrinkage: {selectedClayForNewPiece.shrinkage_pct}%
+							</span>
+						{/if}
+					</div>
+
+					<div class="grid grid-cols-3 gap-2">
+						<div class="space-y-1">
+							<label for="piece-target-length" class="text-[10px] text-stone-600 dark:text-stone-400 font-medium">Length (cm)</label>
+							<input 
+								id="piece-target-length"
+								type="number" 
+								step="0.1" 
+								min="0"
+								bind:value={newTargetLength}
+								placeholder="e.g. 10.0" 
+								class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+							/>
+						</div>
+
+						<div class="space-y-1">
+							<label for="piece-target-width" class="text-[10px] text-stone-600 dark:text-stone-400 font-medium">Width (cm)</label>
+							<input 
+								id="piece-target-width"
+								type="number" 
+								step="0.1" 
+								min="0"
+								bind:value={newTargetWidth}
+								placeholder="e.g. 10.0" 
+								class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+							/>
+						</div>
+
+						<div class="space-y-1">
+							<label for="piece-target-height" class="text-[10px] text-stone-600 dark:text-stone-400 font-medium">Height (cm)</label>
+							<input 
+								id="piece-target-height"
+								type="number" 
+								step="0.1" 
+								min="0"
+								bind:value={newTargetHeight}
+								placeholder="e.g. 12.5" 
+								class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+							/>
+						</div>
+					</div>
+
+					{#if newTargetLength || newTargetWidth || newTargetHeight}
+						{@const shrinkPct = selectedClayForNewPiece ? selectedClayForNewPiece.shrinkage_pct : 12.0}
+						{@const fLen = calculateFormedDimension(newTargetLength, shrinkPct)}
+						{@const fWid = calculateFormedDimension(newTargetWidth, shrinkPct)}
+						{@const fHgt = calculateFormedDimension(newTargetHeight, shrinkPct)}
+						<div class="mt-2 p-2.5 rounded-lg bg-[#3B7258]/10 border border-[#3B7258]/30 text-xs space-y-1">
+							<div class="flex items-center justify-between font-bold text-[#3B7258] dark:text-[#81B29A]">
+								<span class="flex items-center gap-1">
+									<Sparkles class="w-3.5 h-3.5" />
+									<span>Required Wet/Formed Size (Pre-Shrinkage):</span>
+								</span>
+								<span class="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-[#3B7258]/20">
+									+{((1 / (1 - shrinkPct/100) - 1) * 100).toFixed(1)}% Pre-Fire Target
+								</span>
+							</div>
+							<div class="font-mono text-xs font-extrabold text-stone-900 dark:text-stone-100">
+								{#if fLen}<span>L: <strong class="text-[#E07A5F]">{fLen} cm</strong></span>{/if}
+								{#if fLen && (fWid || fHgt)}<span class="text-stone-400"> × </span>{/if}
+								{#if fWid}<span>W: <strong class="text-[#E07A5F]">{fWid} cm</strong></span>{/if}
+								{#if fWid && fHgt}<span class="text-stone-400"> × </span>{/if}
+								{#if fHgt}<span>H: <strong class="text-[#E07A5F]">{fHgt} cm</strong></span>{/if}
+							</div>
+							<p class="text-[10px] text-stone-600 dark:text-stone-400 italic">
+								Form clay to these dimensions so it shrinks to your goal size after {shrinkPct}% {selectedClayForNewPiece ? selectedClayForNewPiece.name : 'clay'} shrinkage.
+							</p>
+						</div>
+					{/if}
+				</div>
+
 				<div class="space-y-1.5">
 					<label for="piece-weight-amount" class="text-stone-700 dark:text-stone-300 font-semibold">Clay Weight Used (Formed Weight)</label>
 					<div class="flex gap-2">
@@ -3119,6 +3347,146 @@
 						/>
 					</div>
 				</div>
+			</div>
+
+			<!-- Goal Dimensions & Clay Shrinkage Target Breakdown -->
+			<div class="p-3 bg-[#E07A5F]/10 dark:bg-[#E07A5F]/15 rounded-xl border border-[#E07A5F]/30 space-y-2 text-xs">
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-1.5 font-bold text-stone-900 dark:text-stone-100">
+						<Ruler class="w-4 h-4 text-[#E07A5F]" />
+						<span>Goal Dimensions & Formed Target Size</span>
+					</div>
+					<div class="flex items-center gap-2">
+						<span class="text-[10px] font-bold text-[#E07A5F] bg-white dark:bg-stone-900 px-2 py-0.5 rounded border border-[#E07A5F]/30">
+							Clay Shrinkage: {selectedPieceShrinkPct}%
+						</span>
+						{#if !isEditingDimensions}
+							<button 
+								type="button" 
+								onclick={() => {
+									editingTargetLength = selectedPiece?.target_length_cm || selectedPiece?.length_cm || null;
+									editingTargetWidth = selectedPiece?.target_width_cm || selectedPiece?.width_cm || null;
+									editingTargetHeight = selectedPiece?.target_height_cm || selectedPiece?.height_cm || null;
+									isEditingDimensions = true;
+								}} 
+								class="text-[11px] font-bold text-[#E07A5F] hover:underline"
+							>
+								✏️ Edit Dimensions
+							</button>
+						{/if}
+					</div>
+				</div>
+
+				{#if isEditingDimensions}
+					<div class="space-y-2 pt-1">
+						<div class="grid grid-cols-3 gap-2">
+							<div class="space-y-1">
+								<label for="edit-target-len" class="text-[10px] font-semibold text-stone-700 dark:text-stone-300">Goal Length (cm)</label>
+								<input 
+									id="edit-target-len"
+									type="number" 
+									step="0.1" 
+									min="0"
+									bind:value={editingTargetLength}
+									placeholder="e.g. 10.0" 
+									class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+								/>
+							</div>
+							<div class="space-y-1">
+								<label for="edit-target-wid" class="text-[10px] font-semibold text-stone-700 dark:text-stone-300">Goal Width (cm)</label>
+								<input 
+									id="edit-target-wid"
+									type="number" 
+									step="0.1" 
+									min="0"
+									bind:value={editingTargetWidth}
+									placeholder="e.g. 10.0" 
+									class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+								/>
+							</div>
+							<div class="space-y-1">
+								<label for="edit-target-hgt" class="text-[10px] font-semibold text-stone-700 dark:text-stone-300">Goal Height (cm)</label>
+								<input 
+									id="edit-target-hgt"
+									type="number" 
+									step="0.1" 
+									min="0"
+									bind:value={editingTargetHeight}
+									placeholder="e.g. 12.5" 
+									class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+								/>
+							</div>
+						</div>
+						<div class="flex justify-end gap-2 pt-1">
+							<button 
+								type="button" 
+								onclick={() => isEditingDimensions = false}
+								class="px-3 py-1 bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-lg font-semibold text-[11px]"
+							>
+								Cancel
+							</button>
+							<button 
+								type="button" 
+								onclick={savePieceDimensions}
+								class="px-3 py-1 bg-[#E07A5F] hover:bg-[#C85A32] text-white rounded-lg font-bold text-[11px] shadow"
+							>
+								Save & Recalculate Formed Target
+							</button>
+						</div>
+					</div>
+				{:else}
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+						<!-- Desired Final Size Card -->
+						<div class="bg-white/80 dark:bg-stone-950/80 p-2.5 rounded-lg border border-stone-200 dark:border-stone-800">
+							<span class="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block mb-1">
+								🎯 Desired Final Fired Size
+							</span>
+							{#if selectedPiece.target_length_cm || selectedPiece.target_width_cm || selectedPiece.target_height_cm}
+								<div class="font-mono text-sm font-extrabold text-stone-900 dark:text-stone-100">
+									{#if selectedPiece.target_length_cm}{selectedPiece.target_length_cm} <span class="text-xs font-normal text-stone-500">L</span>{/if}
+									{#if selectedPiece.target_length_cm && (selectedPiece.target_width_cm || selectedPiece.target_height_cm)} × {/if}
+									{#if selectedPiece.target_width_cm}{selectedPiece.target_width_cm} <span class="text-xs font-normal text-stone-500">W</span>{/if}
+									{#if selectedPiece.target_width_cm && selectedPiece.target_height_cm} × {/if}
+									{#if selectedPiece.target_height_cm}{selectedPiece.target_height_cm} <span class="text-xs font-normal text-stone-500">H</span>{/if}
+									<span class="text-xs font-normal text-stone-500">cm</span>
+								</div>
+							{:else}
+								<span class="text-stone-400 italic text-[11px]">No desired final dimensions specified.</span>
+							{/if}
+						</div>
+
+						<!-- Required Formed Size Card -->
+						<div class="bg-[#3B7258]/10 dark:bg-[#3B7258]/20 p-2.5 rounded-lg border border-[#3B7258]/30">
+							<span class="text-[10px] font-bold uppercase tracking-wider text-[#3B7258] dark:text-[#81B29A] block mb-1">
+								🏺 Required Formed (Wet) Target Size
+							</span>
+							{#if selectedPiece.formed_length_cm || selectedPiece.formed_width_cm || selectedPiece.formed_height_cm}
+								<div class="font-mono text-sm font-extrabold text-[#3B7258] dark:text-[#81B29A]">
+									{#if selectedPiece.formed_length_cm}{selectedPiece.formed_length_cm} <span class="text-xs font-normal">L</span>{/if}
+									{#if selectedPiece.formed_length_cm && (selectedPiece.formed_width_cm || selectedPiece.formed_height_cm)} × {/if}
+									{#if selectedPiece.formed_width_cm}{selectedPiece.formed_width_cm} <span class="text-xs font-normal">W</span>{/if}
+									{#if selectedPiece.formed_width_cm && selectedPiece.formed_height_cm} × {/if}
+									{#if selectedPiece.formed_height_cm}{selectedPiece.formed_height_cm} <span class="text-xs font-normal">H</span>{/if}
+									<span class="text-xs font-normal">cm</span>
+								</div>
+							{:else if selectedPiece.target_length_cm || selectedPiece.target_width_cm || selectedPiece.target_height_cm}
+								{@const fLen = calculateFormedDimension(selectedPiece.target_length_cm, selectedPieceShrinkPct)}
+								{@const fWid = calculateFormedDimension(selectedPiece.target_width_cm, selectedPieceShrinkPct)}
+								{@const fHgt = calculateFormedDimension(selectedPiece.target_height_cm, selectedPieceShrinkPct)}
+								<div class="font-mono text-sm font-extrabold text-[#3B7258] dark:text-[#81B29A]">
+									{#if fLen}{fLen} <span class="text-xs font-normal">L</span>{/if}
+									{#if fLen && (fWid || fHgt)} × {/if}
+									{#if fWid}{fWid} <span class="text-xs font-normal">W</span>{/if}
+									{#if fWid && fHgt} × {/if}
+									{#if fHgt}{fHgt} <span class="text-xs font-normal">H</span>{/if}
+									<span class="text-xs font-normal">cm</span>
+								</div>
+							{:else}
+								<span class="text-stone-400 italic text-[11px]">Specify goal dimensions to view required wet form size.</span>
+							{/if}
+						</div>
+					</div>
+				{/if}
 			</div>
 
 			<!-- Piece Notes / Description Section -->
@@ -3891,6 +4259,52 @@
 							<option value="oz">ounces (oz)</option>
 							<option value="lbs">pounds (lbs)</option>
 						</select>
+					</div>
+				</div>
+
+				<!-- Goal Dimensions section in Duplicate Modal -->
+				<div class="space-y-2 p-3 bg-stone-50 dark:bg-stone-900/60 rounded-xl border border-stone-200 dark:border-stone-800">
+					<label class="text-stone-800 dark:text-stone-200 font-bold flex items-center gap-1.5">
+						<Ruler class="w-3.5 h-3.5 text-[#E07A5F]" />
+						<span>Goal Dimensions (Final Fired Size in cm)</span>
+					</label>
+					<div class="grid grid-cols-3 gap-2">
+						<div class="space-y-1">
+							<label for="dup-target-len" class="text-[10px] text-stone-600 dark:text-stone-400 font-medium">Length (cm)</label>
+							<input 
+								id="dup-target-len"
+								type="number" 
+								step="0.1" 
+								min="0"
+								bind:value={duplicateTargetLength}
+								placeholder="e.g. 10.0" 
+								class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs"
+							/>
+						</div>
+						<div class="space-y-1">
+							<label for="dup-target-wid" class="text-[10px] text-stone-600 dark:text-stone-400 font-medium">Width (cm)</label>
+							<input 
+								id="dup-target-wid"
+								type="number" 
+								step="0.1" 
+								min="0"
+								bind:value={duplicateTargetWidth}
+								placeholder="e.g. 10.0" 
+								class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs"
+							/>
+						</div>
+						<div class="space-y-1">
+							<label for="dup-target-hgt" class="text-[10px] text-stone-600 dark:text-stone-400 font-medium">Height (cm)</label>
+							<input 
+								id="dup-target-hgt"
+								type="number" 
+								step="0.1" 
+								min="0"
+								bind:value={duplicateTargetHeight}
+								placeholder="e.g. 12.5" 
+								class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs"
+							/>
+						</div>
 					</div>
 				</div>
 

@@ -174,8 +174,15 @@ CREATE TABLE IF NOT EXISTS public.ceramic_pieces (
   target_glaze_cone TEXT REFERENCES public.pyrometric_cones(name) DEFAULT 'Cone 6',
   
   weight_grams INT,
+  length_cm NUMERIC(5,2),
   height_cm NUMERIC(5,2),
   width_cm NUMERIC(5,2),
+  target_length_cm NUMERIC(5,2),
+  target_width_cm NUMERIC(5,2),
+  target_height_cm NUMERIC(5,2),
+  formed_length_cm NUMERIC(5,2),
+  formed_width_cm NUMERIC(5,2),
+  formed_height_cm NUMERIC(5,2),
   initial_photo_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

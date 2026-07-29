@@ -96,8 +96,20 @@ export interface CeramicPiece {
 	target_glaze_cone: string;
 	
 	weight_grams?: number | null;
+	length_cm?: number | null;
 	height_cm?: number | null;
 	width_cm?: number | null;
+
+	// Desired (Final Goal) Dimensions
+	target_length_cm?: number | null;
+	target_width_cm?: number | null;
+	target_height_cm?: number | null;
+
+	// Calculated Formed (Wet) Dimensions accounting for shrinkage
+	formed_length_cm?: number | null;
+	formed_width_cm?: number | null;
+	formed_height_cm?: number | null;
+
 	initial_photo_url?: string | null;
 
 	// Date tracking (native Date objects)
