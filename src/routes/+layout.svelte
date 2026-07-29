@@ -84,9 +84,9 @@
 	});
 </script>
 
-<div class="min-h-screen xl:h-screen bg-[#F7F4EF] text-stone-800 dark:bg-[#181616] dark:text-[#F4F1DE] flex flex-col font-sans transition-colors duration-200 selection:bg-[#E07A5F] selection:text-white overflow-y-auto xl:overflow-hidden relative">
+<div class="min-h-screen 2xl:h-screen bg-[#F7F4EF] text-stone-800 dark:bg-[#181616] dark:text-[#F4F1DE] flex flex-col font-sans transition-colors duration-200 selection:bg-[#E07A5F] selection:text-white overflow-y-auto 2xl:overflow-hidden relative">
 	<!-- Top Studio Header -->
-	<header class="border-b border-stone-200 dark:border-stone-800/80 bg-white/95 dark:bg-[#1C1918]/95 backdrop-blur-md z-40 transition-all duration-300 ease-in-out flex-shrink-0 h-16 sm:h-20 sticky top-0 xl:relative {isFullscreen ? 'hidden' : 'block'}">
+	<header class="border-b border-stone-200 dark:border-stone-800/80 bg-white/95 dark:bg-[#1C1918]/95 backdrop-blur-md z-40 transition-all duration-300 ease-in-out flex-shrink-0 h-16 sm:h-20 sticky top-0 2xl:relative {isFullscreen ? 'hidden' : 'block'}">
 		<div class="w-full mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
 			<!-- Logo / Title -->
 			<div class="flex items-center gap-3">
@@ -166,11 +166,11 @@
 					</button>
 				</div>
 
-				<!-- Full Screen Toggle Button (Mobile/Tablet Only: xl:hidden) -->
+				<!-- Full Screen Toggle Button (Mobile/Tablet Only: 2xl:hidden) -->
 				<button
 					type="button"
 					onclick={toggleFullScreen}
-					class="xl:hidden p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border cursor-pointer {isFullscreen ? 'bg-[#E07A5F] text-white border-transparent shadow-sm' : 'bg-stone-100 dark:bg-stone-900 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-800 hover:bg-stone-200 dark:hover:bg-stone-800'}"
+					class="2xl:hidden p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border cursor-pointer {isFullscreen ? 'bg-[#E07A5F] text-white border-transparent shadow-sm' : 'bg-stone-100 dark:bg-stone-900 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-800 hover:bg-stone-200 dark:hover:bg-stone-800'}"
 					aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
 					title={isFullscreen ? "Exit Full Screen Mode" : "Full Screen Workspace"}
 				>
@@ -187,7 +187,7 @@
 	</header>
 
 	<!-- Main Page Slot -->
-	<main class="flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col min-h-0 overflow-y-auto xl:overflow-hidden">
+	<main class="flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col min-h-0 overflow-y-auto 2xl:overflow-hidden">
 		{@render children()}
 	</main>
 

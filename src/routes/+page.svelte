@@ -2165,40 +2165,42 @@
 		{/if}
 	</div>
 
-	<!-- MOBILE STAGE SELECTOR TABS (Visible on mobile/tablet `< xl`) -->
-	<div class="flex items-center justify-start sm:justify-center gap-1.5 overflow-x-auto pb-2 pt-0.5 no-scrollbar flex-shrink-0">
-		<button
-			type="button"
-			onclick={() => mobileActiveStage = 'all'}
-			class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap border cursor-pointer {mobileActiveStage === 'all' ? 'bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 border-transparent shadow-xs' : 'bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800'}"
-		>
-			<span>All Lanes</span>
-			<span class="px-1.5 py-0.2 rounded-full text-[10px] bg-stone-200 dark:bg-stone-800 text-stone-800 dark:text-stone-200">
-				{activePieces.length}
-			</span>
-		</button>
-
-		{#each STAGES as stageInfo}
-			{@const count = stageInfo.id === 'done'
-				? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done').length : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed).length)
-				: activePieces.filter(p => p.stage === stageInfo.id).length}
+	<!-- MOBILE/TABLET STAGE SELECTOR TABS (Visible under 1400px width `< 2xl`) -->
+	<div class="w-full overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2 pt-0.5 no-scrollbar flex-shrink-0 2xl:hidden">
+		<div class="flex items-center justify-start snap-x snap-mandatory gap-1.5 min-w-full w-max px-2 sm:px-4">
 			<button
 				type="button"
-				onclick={() => mobileActiveStage = stageInfo.id}
-				class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap border cursor-pointer {mobileActiveStage === stageInfo.id ? 'bg-[#E07A5F] text-white border-transparent shadow-xs' : 'bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800'}"
+				onclick={() => mobileActiveStage = 'all'}
+				class="snap-start flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap border cursor-pointer {mobileActiveStage === 'all' ? 'bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 border-transparent shadow-xs' : 'bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800'}"
 			>
-				<span>{stageInfo.icon}</span>
-				<span>{stageInfo.label}</span>
-				<span class="px-1.5 py-0.2 rounded-full text-[10px] bg-stone-200/80 dark:bg-stone-800/80 text-stone-800 dark:text-stone-200">
-					{count}
+				<span>All Lanes</span>
+				<span class="px-1.5 py-0.2 rounded-full text-[10px] bg-stone-200 dark:bg-stone-800 text-stone-800 dark:text-stone-200">
+					{activePieces.length}
 				</span>
 			</button>
-		{/each}
+
+			{#each STAGES as stageInfo}
+				{@const count = stageInfo.id === 'done'
+					? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done').length : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed).length)
+					: activePieces.filter(p => p.stage === stageInfo.id).length}
+				<button
+					type="button"
+					onclick={() => mobileActiveStage = stageInfo.id}
+					class="snap-start flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap border cursor-pointer {mobileActiveStage === stageInfo.id ? 'bg-[#E07A5F] text-white border-transparent shadow-xs' : 'bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800'}"
+				>
+					<span>{stageInfo.icon}</span>
+					<span>{stageInfo.label}</span>
+					<span class="px-1.5 py-0.2 rounded-full text-[10px] bg-stone-200/80 dark:bg-stone-800/80 text-stone-800 dark:text-stone-200">
+						{count}
+					</span>
+				</button>
+			{/each}
+		</div>
 	</div>
 
 	<!-- STREAMLINED 6-STAGE RESPONSIVE KANBAN BOARD CONTAINER -->
 	<div class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2">
-		<div class="flex-1 min-h-0 flex justify-center snap-x snap-mandatory gap-3.5 pb-2 min-w-full w-max mx-auto px-2 sm:px-4">
+		<div class="flex-1 min-h-0 flex justify-start snap-x snap-mandatory gap-3.5 pb-2 min-w-full w-max px-2 sm:px-4">
 			{#each STAGES as stageInfo}
 				{@const columnPieces = stageInfo.id === 'done'
 					? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done') : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed))
