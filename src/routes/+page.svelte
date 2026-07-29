@@ -476,13 +476,16 @@
 	// Piece Detail Modal Editing State
 	let editingPieceNotes = $state('');
 	let isEditingNotes = $state(false);
-	let editingDimensionMode = $state<'none' | 'goal' | 'actual_formed'>('none');
+	let editingDimensionMode = $state<'none' | 'goal' | 'actual_formed' | 'actual_fired'>('none');
 	let editingTargetLength = $state<number | null>(null);
 	let editingTargetWidth = $state<number | null>(null);
 	let editingTargetHeight = $state<number | null>(null);
 	let editingActualFormedLength = $state<number | null>(null);
 	let editingActualFormedWidth = $state<number | null>(null);
 	let editingActualFormedHeight = $state<number | null>(null);
+	let editingActualFiredLength = $state<number | null>(null);
+	let editingActualFiredWidth = $state<number | null>(null);
+	let editingActualFiredHeight = $state<number | null>(null);
 
 	function startEditGoalDimensions() {
 		if (!selectedPiece) return;
@@ -498,6 +501,14 @@
 		editingActualFormedWidth = selectedPiece.actual_formed_width_cm || null;
 		editingActualFormedHeight = selectedPiece.actual_formed_height_cm || null;
 		editingDimensionMode = 'actual_formed';
+	}
+
+	function startEditActualFiredDimensions() {
+		if (!selectedPiece) return;
+		editingActualFiredLength = selectedPiece.actual_fired_length_cm || null;
+		editingActualFiredWidth = selectedPiece.actual_fired_width_cm || null;
+		editingActualFiredHeight = selectedPiece.actual_fired_height_cm || null;
+		editingDimensionMode = 'actual_fired';
 	}
 
 	function saveGoalDimensions() {
@@ -552,6 +563,30 @@
 		pieces = pieces.map(p => p.id === selectedPiece!.id ? updatedPiece : p);
 		editingDimensionMode = 'none';
 		showToast(`Saved actual measured pre-fire dimensions!`);
+	}
+
+	function saveActualFiredDimensions() {
+		if (!selectedPiece) return;
+
+		const afiLen = editingActualFiredLength && editingActualFiredLength > 0 ? editingActualFiredLength : null;
+		const afiWid = editingActualFiredWidth && editingActualFiredWidth > 0 ? editingActualFiredWidth : null;
+		const afiHgt = editingActualFiredHeight && editingActualFiredHeight > 0 ? editingActualFiredHeight : null;
+
+		const updatedPiece: CeramicPiece = {
+			...selectedPiece,
+			actual_fired_length_cm: afiLen,
+			actual_fired_width_cm: afiWid,
+			actual_fired_height_cm: afiHgt,
+			width_cm: afiWid || selectedPiece.actual_formed_width_cm || selectedPiece.formed_width_cm || selectedPiece.width_cm,
+			height_cm: afiHgt || selectedPiece.actual_formed_height_cm || selectedPiece.formed_height_cm || selectedPiece.height_cm,
+			length_cm: afiLen || selectedPiece.actual_formed_length_cm || selectedPiece.formed_length_cm || selectedPiece.length_cm,
+			updated_at: new Date()
+		};
+
+		selectedPiece = updatedPiece;
+		pieces = pieces.map(p => p.id === selectedPiece!.id ? updatedPiece : p);
+		editingDimensionMode = 'none';
+		showToast(`Saved actual measured final fired dimensions!`);
 	}
 
 	// Stage Log Add State (inside Detail Modal)
@@ -3700,9 +3735,94 @@
 							</button>
 						</div>
 					</div>
+				{:else if editingDimensionMode === 'actual_fired'}
+					<!-- EDIT ACTUAL MEASURED FINAL FIRED SIZE FORM -->
+					<div class="space-y-3 pt-1 bg-white/80 dark:bg-stone-950/80 p-3 rounded-xl border border-stone-200 dark:border-stone-800">
+						<div class="flex items-center justify-between font-bold text-emerald-800 dark:text-emerald-300 text-xs">
+							<span>✨ Record Actual Measured Final Fired Size</span>
+							<span class="text-[10px] text-stone-500 font-normal">Measured after final glaze firing</span>
+						</div>
+
+						<!-- Reference Target / Goal Banner -->
+						<div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-[11px] flex items-center justify-between">
+							<span class="font-semibold text-stone-700 dark:text-stone-300">🎯 Original Goal (Fired):</span>
+							<span class="font-mono font-extrabold text-emerald-800 dark:text-emerald-300">
+								{#if selectedPiece.target_length_cm || selectedPiece.target_width_cm || selectedPiece.target_height_cm}
+									{#if selectedPiece.target_length_cm}{selectedPiece.target_length_cm}L{/if}{#if selectedPiece.target_length_cm && (selectedPiece.target_width_cm || selectedPiece.target_height_cm)}×{/if}{#if selectedPiece.target_width_cm}{selectedPiece.target_width_cm}W{/if}{#if selectedPiece.target_width_cm && selectedPiece.target_height_cm}×{/if}{#if selectedPiece.target_height_cm}{selectedPiece.target_height_cm}H{/if}cm
+								{:else}
+									Not specified
+								{/if}
+							</span>
+						</div>
+
+						<div class="grid grid-cols-3 gap-2">
+							<div class="space-y-1">
+								<label for="edit-fired-len" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Final Fired L (cm)</label>
+								<input 
+									id="edit-fired-len"
+									type="number" 
+									step="0.1" 
+									min="0"
+									bind:value={editingActualFiredLength}
+									placeholder="e.g. 10.1" 
+									class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+								/>
+							</div>
+							<div class="space-y-1">
+								<label for="edit-fired-wid" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Final Fired W (cm)</label>
+								<input 
+									id="edit-fired-wid"
+									type="number" 
+									step="0.1" 
+									min="0"
+									bind:value={editingActualFiredWidth}
+									placeholder="e.g. 10.1" 
+									class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+								/>
+							</div>
+							<div class="space-y-1">
+								<label for="edit-fired-hgt" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Final Fired H (cm)</label>
+								<input 
+									id="edit-fired-hgt"
+									type="number" 
+									step="0.1" 
+									min="0"
+									bind:value={editingActualFiredHeight}
+									placeholder="e.g. 12.6" 
+									class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+								/>
+							</div>
+						</div>
+
+						{#if selectedPiece.actual_formed_length_cm && editingActualFiredLength}
+							{@const achShrink = (((selectedPiece.actual_formed_length_cm - editingActualFiredLength) / selectedPiece.actual_formed_length_cm) * 100).toFixed(1)}
+							<div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px]">
+								<span class="font-bold text-emerald-800 dark:text-emerald-300">🔥 True Achieved Shrinkage Rate: </span>
+								<span class="font-mono font-extrabold text-stone-900 dark:text-stone-100">{achShrink}%</span>
+								<span class="text-stone-500 text-[10px] italic"> (from actual pre-fire {selectedPiece.actual_formed_length_cm}cm to fired {editingActualFiredLength}cm)</span>
+							</div>
+						{/if}
+
+						<div class="flex justify-end gap-2 pt-1 border-t border-stone-200 dark:border-stone-800">
+							<button 
+								type="button" 
+								onclick={() => editingDimensionMode = 'none'}
+								class="px-3 py-1.5 bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-lg font-semibold text-xs"
+							>
+								Cancel
+							</button>
+							<button 
+								type="button" 
+								onclick={saveActualFiredDimensions}
+								class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-md transition"
+							>
+								Save Final Fired Size
+							</button>
+						</div>
+					</div>
 				{:else}
-					<!-- 3 BREAKDOWN CARDS DISPLAY MODE -->
-					<div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+					<!-- 4 BREAKDOWN CARDS DISPLAY MODE -->
+					<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
 						<!-- Card 1: Desired Final Fired Goal Size -->
 						<div class="bg-white/80 dark:bg-stone-950/80 p-3 rounded-xl border border-stone-200 dark:border-stone-800 flex flex-col justify-between space-y-2">
 							<div>
@@ -3768,7 +3888,7 @@
 							<span class="text-[9.5px] text-stone-500 dark:text-stone-400 italic">Pre-fire size to hit goal</span>
 						</div>
 
-						<!-- Card 3: Actual Measured Formed Size & Predicted Post-Firing Size -->
+						<!-- Card 3: Actual Measured Pre-Fire Size & Predicted Post-Firing Size -->
 						<div class="bg-amber-500/10 dark:bg-amber-500/15 p-3 rounded-xl border border-amber-500/30 flex flex-col justify-between space-y-2">
 							<div>
 								<div class="flex items-center justify-between mb-1">
@@ -3818,6 +3938,56 @@
 								{/if}
 							</div>
 							<span class="text-[9.5px] text-stone-500 dark:text-stone-400 italic">Measured before firing (formed, trimmed, bone dry)</span>
+						</div>
+
+						<!-- Card 4: Actual Measured Final Fired Size -->
+						<div class="bg-emerald-500/10 dark:bg-emerald-500/15 p-3 rounded-xl border border-emerald-500/30 flex flex-col justify-between space-y-2">
+							<div>
+								<div class="flex items-center justify-between mb-1">
+									<span class="text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+										✨ Actual Measured Final Fired Size
+									</span>
+									{#if selectedPiece.actual_fired_length_cm || selectedPiece.actual_fired_width_cm || selectedPiece.actual_fired_height_cm}
+										<button 
+											type="button" 
+											onclick={startEditActualFiredDimensions}
+											class="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 hover:underline"
+										>
+											✏️ Edit
+										</button>
+									{/if}
+								</div>
+								{#if selectedPiece.actual_fired_length_cm || selectedPiece.actual_fired_width_cm || selectedPiece.actual_fired_height_cm}
+									{@const afiL = selectedPiece.actual_fired_length_cm}
+									{@const afiW = selectedPiece.actual_fired_width_cm}
+									{@const afiH = selectedPiece.actual_fired_height_cm}
+									<div class="font-mono text-sm font-extrabold text-stone-900 dark:text-stone-100">
+										{#if afiL}{afiL} <span class="text-xs font-normal">L</span>{/if}
+										{#if afiL && (afiW || afiH)} × {/if}
+										{#if afiW}{afiW} <span class="text-xs font-normal">W</span>{/if}
+										{#if afiW && afiH} × {/if}
+										{#if afiH}{afiH} <span class="text-xs font-normal">H</span>{/if}
+										<span class="text-xs font-normal">cm</span>
+									</div>
+									{#if selectedPiece.actual_formed_length_cm && afiL}
+										{@const trueShrink = (((selectedPiece.actual_formed_length_cm - afiL) / selectedPiece.actual_formed_length_cm) * 100).toFixed(1)}
+										<div class="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 pt-1">
+											<span>🔥 Actual Shrinkage: </span>
+											<span class="font-mono font-extrabold">{trueShrink}%</span>
+										</div>
+									{/if}
+								{:else}
+									<span class="text-stone-500 dark:text-stone-400 italic text-[10px] block mb-1">Not recorded yet.</span>
+									<button 
+										type="button" 
+										onclick={startEditActualFiredDimensions}
+										class="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-800 dark:text-emerald-200 rounded font-bold text-[10px] transition cursor-pointer"
+									>
+										+ Record Final Fired Size
+									</button>
+								{/if}
+							</div>
+							<span class="text-[9.5px] text-stone-500 dark:text-stone-400 italic">Measured after final firing</span>
 						</div>
 					</div>
 				{/if}

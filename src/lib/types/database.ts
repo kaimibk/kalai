@@ -112,10 +112,15 @@ export interface CeramicPiece {
 	formed_width_cm?: number | null;
 	formed_height_cm?: number | null;
 
-	// Actual Measured Formed (Wet) Dimensions recorded after forming
+	// Actual Measured Formed (Pre-Fire) Dimensions recorded after forming/trimming
 	actual_formed_length_cm?: number | null;
 	actual_formed_width_cm?: number | null;
 	actual_formed_height_cm?: number | null;
+
+	// Actual Measured Final Fired Dimensions recorded after final firing
+	actual_fired_length_cm?: number | null;
+	actual_fired_width_cm?: number | null;
+	actual_fired_height_cm?: number | null;
 
 	initial_photo_url?: string | null;
 
