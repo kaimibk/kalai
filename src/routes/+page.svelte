@@ -583,13 +583,17 @@
 	let pendingPointerId: number | null = null;
 	const TOUCH_HOLD_MS = 450;
 	const MOUSE_HOLD_MS = 50;
-	const TOUCH_MOVE_THRESHOLD = 18;
-	let stageBounds: { id: CeramicStage; rect: DOMRect }[] = [];
+	let boardContainerRef = $state<HTMLElement | null>(null);
+	let autoScrollAnimFrame: number | null = null;
 
 	function resetDragState() {
 		if (touchLongPressTimer) {
 			clearTimeout(touchLongPressTimer);
 			touchLongPressTimer = null;
+		}
+		if (autoScrollAnimFrame !== null) {
+			cancelAnimationFrame(autoScrollAnimFrame);
+			autoScrollAnimFrame = null;
 		}
 		if (pendingPointerTarget && pendingPointerId !== null) {
 			try {
@@ -603,11 +607,97 @@
 		pendingPieceId = null;
 		pendingBatchKey = null;
 		touchDragActive = false;
+		isSnappingStage = false;
 		draggedPieceId = null;
 		draggedBatchKey = null;
 		dragOverStageId = null;
 		dragOverCardGroupKey = null;
 	}
+
+	const TOUCH_MOVE_THRESHOLD = 18;
+
+	let isSnappingStage = false;
+	let lastStageSnapTime = 0;
+
+	function updateAutoScroll() {
+		if (!touchDragActive || !boardContainerRef || isSnappingStage) {
+			if (autoScrollAnimFrame !== null) {
+				cancelAnimationFrame(autoScrollAnimFrame);
+				autoScrollAnimFrame = null;
+			}
+			return;
+		}
+
+		const now = Date.now();
+		if (now - lastStageSnapTime < 500) {
+			autoScrollAnimFrame = requestAnimationFrame(updateAutoScroll);
+			return;
+		}
+
+		const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 800;
+		const EDGE_THRESHOLD = 80; // 80px edge trigger zone
+
+		const stageElements = Array.from(boardContainerRef.querySelectorAll('[data-stage-id]')) as HTMLElement[];
+		if (stageElements.length === 0) return;
+
+		const containerRect = boardContainerRef.getBoundingClientRect();
+		const containerCenter = containerRect.left + containerRect.width / 2;
+
+		let closestIdx = 0;
+		let minDiff = Infinity;
+		stageElements.forEach((el, idx) => {
+			const rect = el.getBoundingClientRect();
+			const stageCenter = rect.left + rect.width / 2;
+			const diff = Math.abs(stageCenter - containerCenter);
+			if (diff < minDiff) {
+				minDiff = diff;
+				closestIdx = idx;
+			}
+		});
+
+		let targetIdx = closestIdx;
+		if (touchDragGhostX > viewportWidth - EDGE_THRESHOLD) {
+			targetIdx = Math.min(stageElements.length - 1, closestIdx + 1);
+		} else if (touchDragGhostX < EDGE_THRESHOLD) {
+			targetIdx = Math.max(0, closestIdx - 1);
+		}
+
+		if (targetIdx !== closestIdx) {
+			const targetEl = stageElements[targetIdx];
+			isSnappingStage = true;
+			lastStageSnapTime = now;
+
+			targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+
+			setTimeout(() => {
+				isSnappingStage = false;
+				const el = document.elementFromPoint(touchDragGhostX, touchDragGhostY);
+				if (el) {
+					const cardEl = el.closest('[data-card-group-key]') as HTMLElement | null;
+					const stageEl = el.closest('[data-stage-id]') as HTMLElement | null;
+
+					const targetCardKey = cardEl?.dataset.cardGroupKey || null;
+
+					let isSelf = false;
+					if (targetCardKey) {
+						if (draggedBatchKey) {
+							const [srcBatchId] = draggedBatchKey.split('::');
+							isSelf = targetCardKey === srcBatchId;
+						} else if (draggedPieceId) {
+							isSelf = targetCardKey === draggedPieceId;
+						}
+					}
+
+					dragOverCardGroupKey = isSelf ? null : targetCardKey;
+					dragOverStageId = stageEl ? (stageEl.dataset.stageId as CeramicStage) : null;
+				}
+			}, 500);
+		}
+
+		autoScrollAnimFrame = requestAnimationFrame(updateAutoScroll);
+	}
+
+	let stageBounds: { id: CeramicStage; rect: DOMRect }[] = [];
 
 	function updateStageBounds() {
 		if (typeof document === 'undefined') return;
@@ -708,6 +798,10 @@
 			touchDragGhostX = e.clientX;
 			touchDragGhostY = e.clientY;
 
+			if (autoScrollAnimFrame === null) {
+				autoScrollAnimFrame = requestAnimationFrame(updateAutoScroll);
+			}
+
 			// Live DOM element hit-testing under current pointer position
 			const el = document.elementFromPoint(e.clientX, e.clientY);
 			if (el) {
@@ -763,8 +857,16 @@
 		};
 
 		const onTouchMove = (e: TouchEvent) => {
-			if (touchDragActive && e.cancelable) {
-				e.preventDefault();
+			if (touchDragActive) {
+				if (e.cancelable) e.preventDefault();
+				if (e.touches && e.touches.length > 0) {
+					touchDragGhostX = e.touches[0].clientX;
+					touchDragGhostY = e.touches[0].clientY;
+
+					if (autoScrollAnimFrame === null) {
+						autoScrollAnimFrame = requestAnimationFrame(updateAutoScroll);
+					}
+				}
 			}
 		};
 
@@ -848,6 +950,17 @@
 		});
 
 		showToast(`Merged ${sourcePiecesToMerge.length} piece(s) into batch "${effectiveBatchTitle}"!`);
+		snapStageToCenter(targetPiece.stage);
+	}
+
+	function snapStageToCenter(stageId: CeramicStage) {
+		if (typeof document === 'undefined') return;
+		setTimeout(() => {
+			const stageEl = document.querySelector(`[data-stage-id="${stageId}"]`) as HTMLElement | null;
+			if (stageEl) {
+				stageEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+			}
+		}, 60);
 	}
 
 	function executeStageMove(targetStage: CeramicStage) {
@@ -874,6 +987,7 @@
 				return p;
 			});
 			showToast(`Moved batch pieces to ${stageName}`);
+			snapStageToCenter(targetStage);
 		} else if (draggedPieceId) {
 			const piece = pieces.find(p => p.id === draggedPieceId);
 			if (piece && piece.stage !== targetStage) {
@@ -896,6 +1010,7 @@
 				});
 
 				showToast(`Moved "${piece.title}" to ${stageName}`);
+				snapStageToCenter(targetStage);
 			}
 		}
 	}
@@ -2393,8 +2508,8 @@
 	</div>
 
 	<!-- STREAMLINED 6-STAGE RESPONSIVE KANBAN BOARD CONTAINER -->
-	<div class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2">
-		<div class="flex-1 min-h-0 flex justify-start snap-x snap-mandatory gap-3.5 pb-2 min-w-full w-max px-2 sm:px-4">
+	<div bind:this={boardContainerRef} class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto {touchDragActive ? 'snap-none scroll-auto' : 'snap-x snap-mandatory scroll-smooth'} pb-2">
+		<div class="flex-1 min-h-0 flex justify-start {touchDragActive ? 'snap-none' : 'snap-x snap-mandatory'} gap-3.5 pb-2 min-w-full w-max px-2 sm:px-4">
 			{#each STAGES as stageInfo}
 				{@const columnPieces = stageInfo.id === 'done'
 					? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done') : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed))
