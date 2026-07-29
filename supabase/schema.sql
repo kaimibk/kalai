@@ -93,7 +93,7 @@ VALUES
   ('Tile', 'Ceramic flat tiles & wall hangings')
 ON CONFLICT (name) DO NOTHING;
 
--- 5. Streamlined 6-Stage Kanban Lifecycle Table
+-- 5. Expanded 8-Stage Kanban Lifecycle Table
 CREATE TABLE IF NOT EXISTS public.kanban_stages (
   id TEXT PRIMARY KEY,
   display_order INT UNIQUE NOT NULL,
@@ -104,12 +104,14 @@ CREATE TABLE IF NOT EXISTS public.kanban_stages (
 
 INSERT INTO public.kanban_stages (id, display_order, label, icon, description)
 VALUES 
-  ('backlog', 1, 'Backlog / To-Do', '💡', 'Planned ideas and commission requests'),
+  ('backlog', 1, 'Backlog / Planned', '💡', 'Planned ideas and commission requests'),
   ('formed', 2, 'Formed', '🏺', 'Wheel thrown, handbuilt, slab, or slipcast wet clay'),
-  ('ready_to_trim', 3, 'Trimming (Leather-Hard)', '🔪', 'Leather-hard trimming, carving, and handle joining'),
-  ('bone_dry', 4, 'Bone Dry (Bisque Pending)', '☀️', 'Bone dry drying prior to bisque firing'),
-  ('glazed', 5, 'Glazed (Glaze Fire Pending)', '🖌️', 'Bisque fired, glazed, and waiting for glaze kiln fire'),
-  ('done', 6, 'Finished', '✨', 'Finished ceramic piece')
+  ('leather_hard', 3, 'Drying to Leather-Hard', '📦', 'Drying under wrap, ready for foot trimming and handle joining'),
+  ('trimmed', 4, 'Trimmed', '🔪', 'Trimmed foot, carved details, and attached handles'),
+  ('pending_bisque', 5, 'Pending Bisque', '☀️', 'Drying greenware awaiting bisque kiln loading'),
+  ('bisqued', 6, 'Bisqued (Awaiting Glaze)', '🏷️', 'Bisque fired pieces ready for wax resist & glazing'),
+  ('glazed', 7, 'Glazed (Pending Glaze Fire)', '🖌️', 'Glaze applied, waiting for glaze kiln fire'),
+  ('done', 8, 'Finished', '✨', 'Finished ceramic piece')
 ON CONFLICT (id) DO UPDATE SET label = EXCLUDED.label, icon = EXCLUDED.icon;
 
 -- 6. Clay Bodies

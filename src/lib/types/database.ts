@@ -1,9 +1,11 @@
 export type CeramicStage =
-	| 'backlog'        // 💡 To-Do / Planned Idea
+	| 'backlog'        // 💡 Backlog / Planned Idea
 	| 'formed'         // 🏺 Formed (Wheel Thrown, Handbuilt, Slab, Slipcast)
-	| 'ready_to_trim'  // 🔪 Trimming (Leather-Hard, Handles, Carving)
-	| 'bone_dry'       // ☀️ Bone Dry (Bisque Fire Pending)
-	| 'glazed'         // 🖌️ Glazed (Glaze Layering & Glaze Fire Pending)
+	| 'leather_hard'   // 📦 Drying to Leather-Hard
+	| 'trimmed'        // 🔪 Trimmed (Foot Turned, Handles Attached, Carved)
+	| 'pending_bisque' // ☀️ Pending Bisque (Drying Greenware & Bisque Kiln Load Pending)
+	| 'bisqued'        // 🏷️ Bisqued (Awaiting Glaze & Wax Application)
+	| 'glazed'         // 🖌️ Glazed (Glaze Firing Pending)
 	| 'done';          // ✨ Finished Ceramic Piece
 
 export type GlazeStyle = 'dip' | 'brush' | 'spray' | 'pour' | 'underglaze' | 'wax_accent';

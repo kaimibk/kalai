@@ -176,13 +176,15 @@
 		return Math.round((formedCm * scale) * 100) / 100;
 	}
 
-	// Streamlined 6-Stage Kanban Lifecycle
+	// Expanded 8-Stage Kanban Lifecycle
 	const STAGES: { id: CeramicStage; label: string; icon: string; color: string }[] = [
-		{ id: 'backlog', label: 'Backlog / To-Do', icon: '💡', color: 'border-yellow-500/30' },
-		{ id: 'formed', label: 'Formed (Wheel/Handbuilt)', icon: '🏺', color: 'border-[#E07A5F]/40' },
-		{ id: 'ready_to_trim', label: 'Trimming (Leather-Hard)', icon: '🔪', color: 'border-orange-500/40' },
-		{ id: 'bone_dry', label: 'Bone Dry (Bisque Pending)', icon: '☀️', color: 'border-amber-400/30' },
-		{ id: 'glazed', label: 'Glazed (Glaze Fire Pending)', icon: '🖌️', color: 'border-[#81B29A]/40' },
+		{ id: 'backlog', label: 'Backlog / Planned', icon: '💡', color: 'border-yellow-500/30' },
+		{ id: 'formed', label: 'Formed', icon: '🏺', color: 'border-[#E07A5F]/40' },
+		{ id: 'leather_hard', label: 'Drying to Leather-Hard', icon: '📦', color: 'border-amber-600/40' },
+		{ id: 'trimmed', label: 'Trimmed', icon: '🔪', color: 'border-orange-500/40' },
+		{ id: 'pending_bisque', label: 'Pending Bisque', icon: '☀️', color: 'border-amber-400/30' },
+		{ id: 'bisqued', label: 'Bisqued (Awaiting Glaze)', icon: '🏷️', color: 'border-teal-500/40' },
+		{ id: 'glazed', label: 'Glazed (Pending Glaze Fire)', icon: '🖌️', color: 'border-[#81B29A]/40' },
 		{ id: 'done', label: 'Finished', icon: '✨', color: 'border-[#81B29A]/60' }
 	];
 
@@ -223,7 +225,7 @@
 		piece_type: 'Mug',
 		clay_body_id: 'cb-1',
 		clay_body_name: 'Speckled Buff 80',
-		stage: 'bone_dry' as CeramicStage,
+		stage: 'pending_bisque' as CeramicStage,
 		batch_id: 'b-101',
 		batch_sequence: i + 1,
 		batch: sampleBatchObj,
@@ -260,7 +262,7 @@
 			piece_type: 'Bowl',
 			clay_body_id: 'cb-1',
 			clay_body_name: 'Speckled Buff 80',
-			stage: 'ready_to_trim',
+			stage: 'trimmed',
 			is_failed: false,
 			target_bisque_cone: 'Cone 06',
 			target_glaze_cone: 'Cone 6',
@@ -356,7 +358,7 @@
 			clay_body_name: 'Red Terracotta Earthenware',
 			stage: 'done',
 			is_failed: true,
-			failure_stage: 'bone_dry',
+			failure_stage: 'pending_bisque',
 			failure_reason: 'Thermal stress S-crack in base',
 			failed_at: new Date('2026-07-24T00:00:00'),
 			target_bisque_cone: 'Cone 04',
@@ -609,8 +611,8 @@
 
 	function updateStageBounds() {
 		if (typeof document === 'undefined') return;
-		const lanes = document.querySelectorAll('[data-stage-id]');
-		stageBounds = Array.from(lanes).map((el) => ({
+		const stageElements = document.querySelectorAll('[data-stage-id]');
+		stageBounds = Array.from(stageElements).map((el) => ({
 			id: (el as HTMLElement).dataset.stageId as CeramicStage,
 			rect: el.getBoundingClientRect()
 		}));
@@ -710,7 +712,7 @@
 			const el = document.elementFromPoint(e.clientX, e.clientY);
 			if (el) {
 				const cardEl = el.closest('[data-card-group-key]') as HTMLElement | null;
-				const laneEl = el.closest('[data-stage-id]') as HTMLElement | null;
+				const stageEl = el.closest('[data-stage-id]') as HTMLElement | null;
 
 				const targetCardKey = cardEl?.dataset.cardGroupKey || null;
 
@@ -726,7 +728,7 @@
 				}
 
 				dragOverCardGroupKey = isSelf ? null : targetCardKey;
-				dragOverStageId = laneEl ? (laneEl.dataset.stageId as CeramicStage) : null;
+				dragOverStageId = stageEl ? (stageEl.dataset.stageId as CeramicStage) : null;
 			} else {
 				dragOverCardGroupKey = null;
 				dragOverStageId = null;
@@ -1294,7 +1296,7 @@
 
 	function advanceBatchGroupStage(group: KanbanDisplayGroup) {
 		const stageOrder: CeramicStage[] = [
-			'backlog', 'formed', 'ready_to_trim', 'bone_dry', 'glazed', 'done'
+			'backlog', 'formed', 'leather_hard', 'trimmed', 'pending_bisque', 'bisqued', 'glazed', 'done'
 		];
 		const pieceIds = new Set(group.pieces.map(p => p.id));
 		const now = new Date();
@@ -1689,7 +1691,7 @@
 
 	function advancePieceStage(pieceId: string) {
 		const stageOrder: CeramicStage[] = [
-			'backlog', 'formed', 'ready_to_trim', 'bone_dry', 'glazed', 'done'
+			'backlog', 'formed', 'leather_hard', 'trimmed', 'pending_bisque', 'bisqued', 'glazed', 'done'
 		];
 		const now = new Date();
 		pieces = pieces.map(p => {
@@ -2045,7 +2047,7 @@
 			<button 
 				onclick={() => showLossArchive = !showLossArchive}
 				class="px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition border cursor-pointer {showLossArchive ? 'bg-red-600 text-white border-red-700 shadow-md ring-2 ring-red-500/30' : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 border-red-200 dark:border-red-800/40'}"
-				title="Toggle Loss Archive (Failed Pieces in Finished Lane)"
+				title="Toggle Loss Archive (Failed Pieces in Finished Stage)"
 			>
 				<ShieldAlert class="w-4 h-4 {showLossArchive ? 'text-white' : 'text-red-500 dark:text-red-400'}" />
 				<span class="hidden md:inline">Loss Archive ({failedPieces.length})</span>
@@ -2365,7 +2367,7 @@
 				onclick={() => mobileActiveStage = 'all'}
 				class="snap-start flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap border cursor-pointer {mobileActiveStage === 'all' ? 'bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 border-transparent shadow-xs' : 'bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-800 hover:bg-stone-100 dark:hover:bg-stone-800'}"
 			>
-				<span>All Lanes</span>
+				<span>All Stages</span>
 				<span class="px-1.5 py-0.2 rounded-full text-[10px] bg-stone-200 dark:bg-stone-800 text-stone-800 dark:text-stone-200">
 					{activePieces.length}
 				</span>
@@ -3336,7 +3338,7 @@
 					<div class="flex items-center gap-2 font-semibold">
 						<AlertTriangle class="w-4.5 h-4.5 text-red-500 flex-shrink-0" />
 						<div>
-							<span class="font-bold uppercase text-[10px] block">Flagged as Failed (Finished Lane):</span>
+							<span class="font-bold uppercase text-[10px] block">Flagged as Failed (Finished Stage):</span>
 							<span class="text-sm font-bold">"{selectedPiece.failure_reason || 'Failure logged'}"</span>
 							{#if selectedPiece.failure_stage}
 								<span class="text-[10px] text-red-600 dark:text-red-400 block font-normal mt-0.5">Failed during: {selectedPiece.failure_stage} stage</span>
