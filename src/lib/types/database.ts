@@ -105,10 +105,15 @@ export interface CeramicPiece {
 	target_width_cm?: number | null;
 	target_height_cm?: number | null;
 
-	// Calculated Formed (Wet) Dimensions accounting for shrinkage
+	// Recommended Formed (Wet Target) Dimensions accounting for shrinkage
 	formed_length_cm?: number | null;
 	formed_width_cm?: number | null;
 	formed_height_cm?: number | null;
+
+	// Actual Measured Formed (Wet) Dimensions recorded after forming
+	actual_formed_length_cm?: number | null;
+	actual_formed_width_cm?: number | null;
+	actual_formed_height_cm?: number | null;
 
 	initial_photo_url?: string | null;
 

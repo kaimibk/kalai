@@ -168,6 +168,14 @@
 		return Math.round((desiredCm / scale) * 100) / 100;
 	}
 
+	function calculateFiredDimension(formedCm: number | null | undefined, shrinkagePct: number): number | null {
+		if (formedCm === null || formedCm === undefined || isNaN(formedCm) || formedCm <= 0) return null;
+		if (shrinkagePct >= 100 || shrinkagePct < 0) return formedCm;
+		const scale = 1 - (shrinkagePct / 100);
+		if (scale <= 0) return formedCm;
+		return Math.round((formedCm * scale) * 100) / 100;
+	}
+
 	// Streamlined 6-Stage Kanban Lifecycle
 	const STAGES: { id: CeramicStage; label: string; icon: string; color: string }[] = [
 		{ id: 'backlog', label: 'Backlog / To-Do', icon: '💡', color: 'border-yellow-500/30' },
@@ -466,12 +474,31 @@
 	// Piece Detail Modal Editing State
 	let editingPieceNotes = $state('');
 	let isEditingNotes = $state(false);
-	let isEditingDimensions = $state(false);
+	let editingDimensionMode = $state<'none' | 'goal' | 'actual_formed'>('none');
 	let editingTargetLength = $state<number | null>(null);
 	let editingTargetWidth = $state<number | null>(null);
 	let editingTargetHeight = $state<number | null>(null);
+	let editingActualFormedLength = $state<number | null>(null);
+	let editingActualFormedWidth = $state<number | null>(null);
+	let editingActualFormedHeight = $state<number | null>(null);
 
-	function savePieceDimensions() {
+	function startEditGoalDimensions() {
+		if (!selectedPiece) return;
+		editingTargetLength = selectedPiece.target_length_cm || null;
+		editingTargetWidth = selectedPiece.target_width_cm || null;
+		editingTargetHeight = selectedPiece.target_height_cm || null;
+		editingDimensionMode = 'goal';
+	}
+
+	function startEditActualFormedDimensions() {
+		if (!selectedPiece) return;
+		editingActualFormedLength = selectedPiece.actual_formed_length_cm || null;
+		editingActualFormedWidth = selectedPiece.actual_formed_width_cm || null;
+		editingActualFormedHeight = selectedPiece.actual_formed_height_cm || null;
+		editingDimensionMode = 'actual_formed';
+	}
+
+	function saveGoalDimensions() {
 		if (!selectedPiece) return;
 		const clay = clayBodies.find(c => c.id === selectedPiece!.clay_body_id || c.name === selectedPiece!.clay_body_name);
 		const shrinkPct = clay ? clay.shrinkage_pct : 12.0;
@@ -492,16 +519,37 @@
 			formed_length_cm: fLen,
 			formed_width_cm: fWid,
 			formed_height_cm: fHgt,
-			width_cm: fWid || selectedPiece.width_cm,
-			height_cm: fHgt || selectedPiece.height_cm,
-			length_cm: fLen || selectedPiece.length_cm,
 			updated_at: new Date()
 		};
 
 		selectedPiece = updatedPiece;
 		pieces = pieces.map(p => p.id === selectedPiece!.id ? updatedPiece : p);
-		isEditingDimensions = false;
-		showToast(`Updated dimensions & recalculated formed target!`);
+		editingDimensionMode = 'none';
+		showToast(`Updated goal dimensions & recalculated recommended wet target!`);
+	}
+
+	function saveActualFormedDimensions() {
+		if (!selectedPiece) return;
+
+		const afLen = editingActualFormedLength && editingActualFormedLength > 0 ? editingActualFormedLength : null;
+		const afWid = editingActualFormedWidth && editingActualFormedWidth > 0 ? editingActualFormedWidth : null;
+		const afHgt = editingActualFormedHeight && editingActualFormedHeight > 0 ? editingActualFormedHeight : null;
+
+		const updatedPiece: CeramicPiece = {
+			...selectedPiece,
+			actual_formed_length_cm: afLen,
+			actual_formed_width_cm: afWid,
+			actual_formed_height_cm: afHgt,
+			width_cm: afWid || selectedPiece.formed_width_cm || selectedPiece.width_cm,
+			height_cm: afHgt || selectedPiece.formed_height_cm || selectedPiece.height_cm,
+			length_cm: afLen || selectedPiece.formed_length_cm || selectedPiece.length_cm,
+			updated_at: new Date()
+		};
+
+		selectedPiece = updatedPiece;
+		pieces = pieces.map(p => p.id === selectedPiece!.id ? updatedPiece : p);
+		editingDimensionMode = 'none';
+		showToast(`Saved actual measured formed dimensions!`);
 	}
 
 	// Stage Log Add State (inside Detail Modal)
@@ -1675,9 +1723,9 @@
 		duplicateDescription = piece.notes || piece.description || '';
 		duplicateQuantity = 1;
 		duplicateCopyGlazes = true;
-		duplicateTargetLength = piece.target_length_cm || piece.length_cm || null;
-		duplicateTargetWidth = piece.target_width_cm || piece.width_cm || null;
-		duplicateTargetHeight = piece.target_height_cm || piece.height_cm || null;
+		duplicateTargetLength = piece.target_length_cm || null;
+		duplicateTargetWidth = piece.target_width_cm || null;
+		duplicateTargetHeight = piece.target_height_cm || null;
 		isDuplicateModalOpen = true;
 	}
 
@@ -3093,7 +3141,7 @@
 				<!-- DESIRED GOAL DIMENSIONS & SHRINKAGE PREVIEW -->
 				<div class="space-y-2 p-3 bg-stone-100/90 dark:bg-stone-900/60 rounded-xl border border-stone-200 dark:border-stone-800">
 					<div class="flex items-center justify-between">
-						<label class="text-stone-800 dark:text-stone-200 font-bold flex items-center gap-1.5">
+						<label class="text-stone-800 dark:text-stone-200 font-bold flex items-center gap-1.5 text-xs">
 							<Ruler class="w-3.5 h-3.5 text-[#E07A5F]" />
 							<span>Desired Goal Dimensions (Final Fired Size in cm)</span>
 						</label>
@@ -3106,7 +3154,7 @@
 
 					<div class="grid grid-cols-3 gap-2">
 						<div class="space-y-1">
-							<label for="piece-target-length" class="text-[10px] text-stone-600 dark:text-stone-400 font-medium">Length (cm)</label>
+							<label for="piece-target-length" class="text-[10px] text-stone-600 dark:text-stone-400 font-medium">Goal Length (cm)</label>
 							<input 
 								id="piece-target-length"
 								type="number" 
@@ -3117,9 +3165,8 @@
 								class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
 							/>
 						</div>
-
 						<div class="space-y-1">
-							<label for="piece-target-width" class="text-[10px] text-stone-600 dark:text-stone-400 font-medium">Width (cm)</label>
+							<label for="piece-target-width" class="text-[10px] text-stone-600 dark:text-stone-400 font-medium">Goal Width (cm)</label>
 							<input 
 								id="piece-target-width"
 								type="number" 
@@ -3130,9 +3177,8 @@
 								class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
 							/>
 						</div>
-
 						<div class="space-y-1">
-							<label for="piece-target-height" class="text-[10px] text-stone-600 dark:text-stone-400 font-medium">Height (cm)</label>
+							<label for="piece-target-height" class="text-[10px] text-stone-600 dark:text-stone-400 font-medium">Goal Height (cm)</label>
 							<input 
 								id="piece-target-height"
 								type="number" 
@@ -3154,10 +3200,10 @@
 							<div class="flex items-center justify-between font-bold text-[#3B7258] dark:text-[#81B29A]">
 								<span class="flex items-center gap-1">
 									<Sparkles class="w-3.5 h-3.5" />
-									<span>Required Wet/Formed Size (Pre-Shrinkage):</span>
+									<span>Recommended Wet Build Target (Pre-Shrinkage):</span>
 								</span>
 								<span class="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-[#3B7258]/20">
-									+{((1 / (1 - shrinkPct/100) - 1) * 100).toFixed(1)}% Pre-Fire Target
+									+{((1 / (1 - shrinkPct/100) - 1) * 100).toFixed(1)}% Build Target
 								</span>
 							</div>
 							<div class="font-mono text-xs font-extrabold text-stone-900 dark:text-stone-100">
@@ -3168,7 +3214,7 @@
 								{#if fHgt}<span>H: <strong class="text-[#E07A5F]">{fHgt} cm</strong></span>{/if}
 							</div>
 							<p class="text-[10px] text-stone-600 dark:text-stone-400 italic">
-								Form clay to these dimensions so it shrinks to your goal size after {shrinkPct}% {selectedClayForNewPiece ? selectedClayForNewPiece.name : 'clay'} shrinkage.
+								Form wet clay to these dimensions so it shrinks to your goal size after {shrinkPct}% {selectedClayForNewPiece ? selectedClayForNewPiece.name : 'clay'} shrinkage.
 							</p>
 						</div>
 					{/if}
@@ -3350,38 +3396,27 @@
 			</div>
 
 			<!-- Goal Dimensions & Clay Shrinkage Target Breakdown -->
-			<div class="p-3 bg-[#E07A5F]/10 dark:bg-[#E07A5F]/15 rounded-xl border border-[#E07A5F]/30 space-y-2 text-xs">
+			<div class="p-3.5 bg-[#E07A5F]/10 dark:bg-[#E07A5F]/15 rounded-xl border border-[#E07A5F]/30 space-y-3 text-xs">
 				<div class="flex items-center justify-between">
-					<div class="flex items-center gap-1.5 font-bold text-stone-900 dark:text-stone-100">
+					<div class="flex items-center gap-1.5 font-bold text-stone-900 dark:text-stone-100 text-sm">
 						<Ruler class="w-4 h-4 text-[#E07A5F]" />
-						<span>Goal Dimensions & Formed Target Size</span>
+						<span>Dimensions & Clay Shrinkage Breakdown</span>
 					</div>
-					<div class="flex items-center gap-2">
-						<span class="text-[10px] font-bold text-[#E07A5F] bg-white dark:bg-stone-900 px-2 py-0.5 rounded border border-[#E07A5F]/30">
-							Clay Shrinkage: {selectedPieceShrinkPct}%
-						</span>
-						{#if !isEditingDimensions}
-							<button 
-								type="button" 
-								onclick={() => {
-									editingTargetLength = selectedPiece?.target_length_cm || selectedPiece?.length_cm || null;
-									editingTargetWidth = selectedPiece?.target_width_cm || selectedPiece?.width_cm || null;
-									editingTargetHeight = selectedPiece?.target_height_cm || selectedPiece?.height_cm || null;
-									isEditingDimensions = true;
-								}} 
-								class="text-[11px] font-bold text-[#E07A5F] hover:underline"
-							>
-								✏️ Edit Dimensions
-							</button>
-						{/if}
-					</div>
+					<span class="text-[10px] font-bold text-[#E07A5F] bg-white dark:bg-stone-900 px-2 py-0.5 rounded border border-[#E07A5F]/30">
+						Clay Shrinkage: {selectedPieceShrinkPct}%
+					</span>
 				</div>
 
-				{#if isEditingDimensions}
-					<div class="space-y-2 pt-1">
+				{#if editingDimensionMode === 'goal'}
+					<!-- EDIT GOAL SIZE FORM -->
+					<div class="space-y-3 pt-1 bg-white/80 dark:bg-stone-950/80 p-3 rounded-xl border border-stone-200 dark:border-stone-800">
+						<div class="flex items-center justify-between font-bold text-amber-800 dark:text-amber-300 text-xs">
+							<span>🎯 Edit Desired Goal Fired Size</span>
+							<span class="text-[10px] text-stone-500 font-normal">Final size desired after firing</span>
+						</div>
 						<div class="grid grid-cols-3 gap-2">
 							<div class="space-y-1">
-								<label for="edit-target-len" class="text-[10px] font-semibold text-stone-700 dark:text-stone-300">Goal Length (cm)</label>
+								<label for="edit-target-len" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Goal Length (cm)</label>
 								<input 
 									id="edit-target-len"
 									type="number" 
@@ -3389,11 +3424,11 @@
 									min="0"
 									bind:value={editingTargetLength}
 									placeholder="e.g. 10.0" 
-									class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+									class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
 								/>
 							</div>
 							<div class="space-y-1">
-								<label for="edit-target-wid" class="text-[10px] font-semibold text-stone-700 dark:text-stone-300">Goal Width (cm)</label>
+								<label for="edit-target-wid" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Goal Width (cm)</label>
 								<input 
 									id="edit-target-wid"
 									type="number" 
@@ -3401,11 +3436,11 @@
 									min="0"
 									bind:value={editingTargetWidth}
 									placeholder="e.g. 10.0" 
-									class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+									class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
 								/>
 							</div>
 							<div class="space-y-1">
-								<label for="edit-target-hgt" class="text-[10px] font-semibold text-stone-700 dark:text-stone-300">Goal Height (cm)</label>
+								<label for="edit-target-hgt" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Goal Height (cm)</label>
 								<input 
 									id="edit-target-hgt"
 									type="number" 
@@ -3413,83 +3448,263 @@
 									min="0"
 									bind:value={editingTargetHeight}
 									placeholder="e.g. 12.5" 
-									class="w-full bg-white dark:bg-stone-950 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+									class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
 								/>
 							</div>
 						</div>
-						<div class="flex justify-end gap-2 pt-1">
+
+						{#if editingTargetLength || editingTargetWidth || editingTargetHeight}
+							{@const fLen = calculateFormedDimension(editingTargetLength, selectedPieceShrinkPct)}
+							{@const fWid = calculateFormedDimension(editingTargetWidth, selectedPieceShrinkPct)}
+							{@const fHgt = calculateFormedDimension(editingTargetHeight, selectedPieceShrinkPct)}
+							<div class="p-2 rounded-lg bg-[#3B7258]/10 border border-[#3B7258]/30 text-[11px] space-y-0.5">
+								<span class="font-bold text-[#3B7258] dark:text-[#81B29A] block">📐 Updated Recommended Wet Build Target:</span>
+								<div class="font-mono text-xs font-extrabold text-stone-900 dark:text-stone-100">
+									{#if fLen}<span>L: <strong class="text-[#E07A5F]">{fLen} cm</strong></span>{/if}
+									{#if fLen && (fWid || fHgt)}<span class="text-stone-400"> × </span>{/if}
+									{#if fWid}<span>W: <strong class="text-[#E07A5F]">{fWid} cm</strong></span>{/if}
+									{#if fWid && fHgt}<span class="text-stone-400"> × </span>{/if}
+									{#if fHgt}<span>H: <strong class="text-[#E07A5F]">{fHgt} cm</strong></span>{/if}
+								</div>
+							</div>
+						{/if}
+
+						<div class="flex justify-end gap-2 pt-1 border-t border-stone-200 dark:border-stone-800">
 							<button 
 								type="button" 
-								onclick={() => isEditingDimensions = false}
-								class="px-3 py-1 bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-lg font-semibold text-[11px]"
+								onclick={() => editingDimensionMode = 'none'}
+								class="px-3 py-1.5 bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-lg font-semibold text-xs"
 							>
 								Cancel
 							</button>
 							<button 
 								type="button" 
-								onclick={savePieceDimensions}
-								class="px-3 py-1 bg-[#E07A5F] hover:bg-[#C85A32] text-white rounded-lg font-bold text-[11px] shadow"
+								onclick={saveGoalDimensions}
+								class="px-4 py-1.5 bg-[#E07A5F] hover:bg-[#C85A32] text-white rounded-lg font-bold text-xs shadow-md transition"
 							>
-								Save & Recalculate Formed Target
+								Save Goal Size
+							</button>
+						</div>
+					</div>
+				{:else if editingDimensionMode === 'actual_formed'}
+					<!-- EDIT ACTUAL MEASURED FORMED SIZE FORM -->
+					<div class="space-y-3 pt-1 bg-white/80 dark:bg-stone-950/80 p-3 rounded-xl border border-stone-200 dark:border-stone-800">
+						<div class="flex items-center justify-between font-bold text-[#3B7258] dark:text-[#81B29A] text-xs">
+							<span>🏺 Record Actual Measured Wet Formed Size</span>
+							<span class="text-[10px] text-stone-500 font-normal">Measured after thrown/handbuilt</span>
+						</div>
+
+						<!-- Reference Recommended Size Banner -->
+						<div class="p-2 rounded-lg bg-[#3B7258]/10 border border-[#3B7258]/25 text-[11px] flex items-center justify-between">
+							<span class="font-semibold text-stone-700 dark:text-stone-300">📐 Recommended Target to Match:</span>
+							<span class="font-mono font-extrabold text-[#3B7258] dark:text-[#81B29A]">
+								{#if selectedPiece.formed_length_cm || selectedPiece.formed_width_cm || selectedPiece.formed_height_cm}
+									{#if selectedPiece.formed_length_cm}{selectedPiece.formed_length_cm}L{/if}{#if selectedPiece.formed_length_cm && (selectedPiece.formed_width_cm || selectedPiece.formed_height_cm)}×{/if}{#if selectedPiece.formed_width_cm}{selectedPiece.formed_width_cm}W{/if}{#if selectedPiece.formed_width_cm && selectedPiece.formed_height_cm}×{/if}{#if selectedPiece.formed_height_cm}{selectedPiece.formed_height_cm}H{/if}cm
+								{:else if selectedPiece.target_length_cm || selectedPiece.target_width_cm || selectedPiece.target_height_cm}
+									{@const rL = calculateFormedDimension(selectedPiece.target_length_cm, selectedPieceShrinkPct)}
+									{@const rW = calculateFormedDimension(selectedPiece.target_width_cm, selectedPieceShrinkPct)}
+									{@const rH = calculateFormedDimension(selectedPiece.target_height_cm, selectedPieceShrinkPct)}
+									{#if rL}{rL}L{/if}{#if rL && (rW || rH)}×{/if}{#if rW}{rW}W{/if}{#if rW && rH}×{/if}{#if rH}{rH}H{/if}cm
+								{:else}
+									Not set
+								{/if}
+							</span>
+						</div>
+
+						<div class="grid grid-cols-3 gap-2">
+							<div class="space-y-1">
+								<label for="edit-formed-len" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Actual Formed L (cm)</label>
+								<input 
+									id="edit-formed-len"
+									type="number" 
+									step="0.1" 
+									min="0"
+									bind:value={editingActualFormedLength}
+									placeholder="e.g. 11.4" 
+									class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+								/>
+							</div>
+							<div class="space-y-1">
+								<label for="edit-formed-wid" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Actual Formed W (cm)</label>
+								<input 
+									id="edit-formed-wid"
+									type="number" 
+									step="0.1" 
+									min="0"
+									bind:value={editingActualFormedWidth}
+									placeholder="e.g. 11.4" 
+									class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+								/>
+							</div>
+							<div class="space-y-1">
+								<label for="edit-formed-hgt" class="text-[10px] font-semibold text-stone-600 dark:text-stone-400">Actual Formed H (cm)</label>
+								<input 
+									id="edit-formed-hgt"
+									type="number" 
+									step="0.1" 
+									min="0"
+									bind:value={editingActualFormedHeight}
+									placeholder="e.g. 14.2" 
+									class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-800 rounded-lg p-2 text-stone-900 dark:text-stone-100 text-xs focus:outline-none focus:border-[#E07A5F]"
+								/>
+							</div>
+						</div>
+
+						{#if editingActualFormedLength || editingActualFormedWidth || editingActualFormedHeight}
+							{@const pL = calculateFiredDimension(editingActualFormedLength, selectedPieceShrinkPct)}
+							{@const pW = calculateFiredDimension(editingActualFormedWidth, selectedPieceShrinkPct)}
+							{@const pH = calculateFiredDimension(editingActualFormedHeight, selectedPieceShrinkPct)}
+							<div class="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] space-y-0.5">
+								<span class="font-bold text-amber-800 dark:text-amber-300 block">🔮 Predicted Post-Firing Fired Outcome (-{selectedPieceShrinkPct}% shrinkage):</span>
+								<div class="font-mono text-xs font-extrabold text-stone-900 dark:text-stone-100">
+									{#if pL}<span>L: <strong class="text-amber-700 dark:text-amber-400">{pL} cm</strong></span>{/if}
+									{#if pL && (pW || pH)}<span class="text-stone-400"> × </span>{/if}
+									{#if pW}<span>W: <strong class="text-amber-700 dark:text-amber-400">{pW} cm</strong></span>{/if}
+									{#if pW && pH}<span class="text-stone-400"> × </span>{/if}
+									{#if pH}<span>H: <strong class="text-amber-700 dark:text-amber-400">{pH} cm</strong></span>{/if}
+								</div>
+							</div>
+						{/if}
+
+						<div class="flex justify-end gap-2 pt-1 border-t border-stone-200 dark:border-stone-800">
+							<button 
+								type="button" 
+								onclick={() => editingDimensionMode = 'none'}
+								class="px-3 py-1.5 bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-lg font-semibold text-xs"
+							>
+								Cancel
+							</button>
+							<button 
+								type="button" 
+								onclick={saveActualFormedDimensions}
+								class="px-4 py-1.5 bg-[#3B7258] hover:bg-[#2e5944] text-white rounded-lg font-bold text-xs shadow-md transition"
+							>
+								Save Measured Size
 							</button>
 						</div>
 					</div>
 				{:else}
-					<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-						<!-- Desired Final Size Card -->
-						<div class="bg-white/80 dark:bg-stone-950/80 p-2.5 rounded-lg border border-stone-200 dark:border-stone-800">
-							<span class="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block mb-1">
-								🎯 Desired Final Fired Size
-							</span>
-							{#if selectedPiece.target_length_cm || selectedPiece.target_width_cm || selectedPiece.target_height_cm}
-								<div class="font-mono text-sm font-extrabold text-stone-900 dark:text-stone-100">
-									{#if selectedPiece.target_length_cm}{selectedPiece.target_length_cm} <span class="text-xs font-normal text-stone-500">L</span>{/if}
-									{#if selectedPiece.target_length_cm && (selectedPiece.target_width_cm || selectedPiece.target_height_cm)} × {/if}
-									{#if selectedPiece.target_width_cm}{selectedPiece.target_width_cm} <span class="text-xs font-normal text-stone-500">W</span>{/if}
-									{#if selectedPiece.target_width_cm && selectedPiece.target_height_cm} × {/if}
-									{#if selectedPiece.target_height_cm}{selectedPiece.target_height_cm} <span class="text-xs font-normal text-stone-500">H</span>{/if}
-									<span class="text-xs font-normal text-stone-500">cm</span>
+					<!-- 3 BREAKDOWN CARDS DISPLAY MODE -->
+					<div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+						<!-- Card 1: Desired Final Fired Goal Size -->
+						<div class="bg-white/80 dark:bg-stone-950/80 p-3 rounded-xl border border-stone-200 dark:border-stone-800 flex flex-col justify-between space-y-2">
+							<div>
+								<div class="flex items-center justify-between mb-1">
+									<span class="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+										🎯 Desired Goal (Fired)
+									</span>
+									<button 
+										type="button" 
+										onclick={startEditGoalDimensions}
+										class="text-[10px] font-bold text-[#E07A5F] hover:underline"
+									>
+										✏️ Edit
+									</button>
 								</div>
-							{:else}
-								<span class="text-stone-400 italic text-[11px]">No desired final dimensions specified.</span>
-							{/if}
+								{#if selectedPiece.target_length_cm || selectedPiece.target_width_cm || selectedPiece.target_height_cm}
+									<div class="font-mono text-sm font-extrabold text-stone-900 dark:text-stone-100">
+										{#if selectedPiece.target_length_cm}{selectedPiece.target_length_cm} <span class="text-xs font-normal text-stone-500">L</span>{/if}
+										{#if selectedPiece.target_length_cm && (selectedPiece.target_width_cm || selectedPiece.target_height_cm)} × {/if}
+										{#if selectedPiece.target_width_cm}{selectedPiece.target_width_cm} <span class="text-xs font-normal text-stone-500">W</span>{/if}
+										{#if selectedPiece.target_width_cm && selectedPiece.target_height_cm} × {/if}
+										{#if selectedPiece.target_height_cm}{selectedPiece.target_height_cm} <span class="text-xs font-normal text-stone-500">H</span>{/if}
+										<span class="text-xs font-normal text-stone-500">cm</span>
+									</div>
+								{:else}
+									<span class="text-stone-400 italic text-[11px]">No goal size set.</span>
+								{/if}
+							</div>
+							<span class="text-[9.5px] text-stone-500 dark:text-stone-400 italic">Target size after firing</span>
 						</div>
 
-						<!-- Required Formed Size Card -->
-						<div class="bg-[#3B7258]/10 dark:bg-[#3B7258]/20 p-2.5 rounded-lg border border-[#3B7258]/30">
-							<span class="text-[10px] font-bold uppercase tracking-wider text-[#3B7258] dark:text-[#81B29A] block mb-1">
-								🏺 Required Formed (Wet) Target Size
-							</span>
-							{#if selectedPiece.formed_length_cm || selectedPiece.formed_width_cm || selectedPiece.formed_height_cm}
-								<div class="font-mono text-sm font-extrabold text-[#3B7258] dark:text-[#81B29A]">
-									{#if selectedPiece.formed_length_cm}{selectedPiece.formed_length_cm} <span class="text-xs font-normal">L</span>{/if}
-									{#if selectedPiece.formed_length_cm && (selectedPiece.formed_width_cm || selectedPiece.formed_height_cm)} × {/if}
-									{#if selectedPiece.formed_width_cm}{selectedPiece.formed_width_cm} <span class="text-xs font-normal">W</span>{/if}
-									{#if selectedPiece.formed_width_cm && selectedPiece.formed_height_cm} × {/if}
-									{#if selectedPiece.formed_height_cm}{selectedPiece.formed_height_cm} <span class="text-xs font-normal">H</span>{/if}
-									<span class="text-xs font-normal">cm</span>
+						<!-- Card 2: Recommended Formed Build Target -->
+						<div class="bg-[#3B7258]/10 dark:bg-[#3B7258]/20 p-3 rounded-xl border border-[#3B7258]/30 flex flex-col justify-between space-y-2">
+							<div>
+								<span class="text-[10px] font-bold uppercase tracking-wider text-[#3B7258] dark:text-[#81B29A] block mb-1">
+									📐 Recommended Wet Target
+								</span>
+								{#if selectedPiece.formed_length_cm || selectedPiece.formed_width_cm || selectedPiece.formed_height_cm}
+									<div class="font-mono text-sm font-extrabold text-[#3B7258] dark:text-[#81B29A]">
+										{#if selectedPiece.formed_length_cm}{selectedPiece.formed_length_cm} <span class="text-xs font-normal">L</span>{/if}
+										{#if selectedPiece.formed_length_cm && (selectedPiece.formed_width_cm || selectedPiece.formed_height_cm)} × {/if}
+										{#if selectedPiece.formed_width_cm}{selectedPiece.formed_width_cm} <span class="text-xs font-normal">W</span>{/if}
+										{#if selectedPiece.formed_width_cm && selectedPiece.formed_height_cm} × {/if}
+										{#if selectedPiece.formed_height_cm}{selectedPiece.formed_height_cm} <span class="text-xs font-normal">H</span>{/if}
+										<span class="text-xs font-normal">cm</span>
+									</div>
+								{:else if selectedPiece.target_length_cm || selectedPiece.target_width_cm || selectedPiece.target_height_cm}
+									{@const fLen = calculateFormedDimension(selectedPiece.target_length_cm, selectedPieceShrinkPct)}
+									{@const fWid = calculateFormedDimension(selectedPiece.target_width_cm, selectedPieceShrinkPct)}
+									{@const fHgt = calculateFormedDimension(selectedPiece.target_height_cm, selectedPieceShrinkPct)}
+									<div class="font-mono text-sm font-extrabold text-[#3B7258] dark:text-[#81B29A]">
+										{#if fLen}{fLen} <span class="text-xs font-normal">L</span>{/if}
+										{#if fLen && (fWid || fHgt)} × {/if}
+										{#if fWid}{fWid} <span class="text-xs font-normal">W</span>{/if}
+										{#if fWid && fHgt} × {/if}
+										{#if fHgt}{fHgt} <span class="text-xs font-normal">H</span>{/if}
+										<span class="text-xs font-normal">cm</span>
+									</div>
+								{:else}
+									<span class="text-stone-400 italic text-[11px]">Set goal size to view build target.</span>
+								{/if}
+							</div>
+							<span class="text-[9.5px] text-stone-500 dark:text-stone-400 italic">Build to this wet size to hit goal</span>
+						</div>
+
+						<!-- Card 3: Actual Measured Formed Size & Predicted Post-Firing Size -->
+						<div class="bg-amber-500/10 dark:bg-amber-500/15 p-3 rounded-xl border border-amber-500/30 flex flex-col justify-between space-y-2">
+							<div>
+								<div class="flex items-center justify-between mb-1">
+									<span class="text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+										🏺 Actual Measured Wet Size
+									</span>
+									{#if selectedPiece.actual_formed_length_cm || selectedPiece.actual_formed_width_cm || selectedPiece.actual_formed_height_cm}
+										<button 
+											type="button" 
+											onclick={startEditActualFormedDimensions}
+											class="text-[10px] font-bold text-amber-800 dark:text-amber-300 hover:underline"
+										>
+											✏️ Edit
+										</button>
+									{/if}
 								</div>
-							{:else if selectedPiece.target_length_cm || selectedPiece.target_width_cm || selectedPiece.target_height_cm}
-								{@const fLen = calculateFormedDimension(selectedPiece.target_length_cm, selectedPieceShrinkPct)}
-								{@const fWid = calculateFormedDimension(selectedPiece.target_width_cm, selectedPieceShrinkPct)}
-								{@const fHgt = calculateFormedDimension(selectedPiece.target_height_cm, selectedPieceShrinkPct)}
-								<div class="font-mono text-sm font-extrabold text-[#3B7258] dark:text-[#81B29A]">
-									{#if fLen}{fLen} <span class="text-xs font-normal">L</span>{/if}
-									{#if fLen && (fWid || fHgt)} × {/if}
-									{#if fWid}{fWid} <span class="text-xs font-normal">W</span>{/if}
-									{#if fWid && fHgt} × {/if}
-									{#if fHgt}{fHgt} <span class="text-xs font-normal">H</span>{/if}
-									<span class="text-xs font-normal">cm</span>
-								</div>
-							{:else}
-								<span class="text-stone-400 italic text-[11px]">Specify goal dimensions to view required wet form size.</span>
-							{/if}
+								{#if selectedPiece.actual_formed_length_cm || selectedPiece.actual_formed_width_cm || selectedPiece.actual_formed_height_cm}
+									{@const afL = selectedPiece.actual_formed_length_cm}
+									{@const afW = selectedPiece.actual_formed_width_cm}
+									{@const afH = selectedPiece.actual_formed_height_cm}
+									{@const predL = calculateFiredDimension(afL, selectedPieceShrinkPct)}
+									{@const predW = calculateFiredDimension(afW, selectedPieceShrinkPct)}
+									{@const predH = calculateFiredDimension(afH, selectedPieceShrinkPct)}
+									<div class="font-mono text-sm font-extrabold text-stone-900 dark:text-stone-100">
+										{#if afL}{afL} <span class="text-xs font-normal">L</span>{/if}
+										{#if afL && (afW || afH)} × {/if}
+										{#if afW}{afW} <span class="text-xs font-normal">W</span>{/if}
+										{#if afW && afH} × {/if}
+										{#if afH}{afH} <span class="text-xs font-normal">H</span>{/if}
+										<span class="text-xs font-normal">cm</span>
+									</div>
+									<div class="text-[10px] font-bold text-amber-800 dark:text-amber-300 pt-1">
+										<span>🔮 Predicted Post-Fire: </span>
+										<span class="font-mono font-extrabold">
+											{#if predL}{predL}L{/if}{#if predL && (predW || predH)}×{/if}{#if predW}{predW}W{/if}{#if predW && predH}×{/if}{#if predH}{predH}H{/if}cm
+										</span>
+									</div>
+								{:else}
+									<span class="text-stone-500 dark:text-stone-400 italic text-[10px] block mb-1">Not recorded yet.</span>
+									<button 
+										type="button" 
+										onclick={startEditActualFormedDimensions}
+										class="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 rounded font-bold text-[10px] transition cursor-pointer"
+									>
+										+ Record Measured Size
+									</button>
+								{/if}
+							</div>
+							<span class="text-[9.5px] text-stone-500 dark:text-stone-400 italic">Recorded after forming</span>
 						</div>
 					</div>
 				{/if}
 			</div>
-
-			<!-- Piece Notes / Description Section -->
 			<div class="p-3 bg-stone-100/90 dark:bg-stone-900/60 rounded-xl border border-stone-200 dark:border-stone-800 space-y-1.5 text-xs">
 				<div class="flex items-center justify-between">
 					<span class="font-bold text-stone-700 dark:text-stone-300 flex items-center gap-1.5">

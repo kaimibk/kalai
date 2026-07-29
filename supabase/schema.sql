@@ -183,6 +183,9 @@ CREATE TABLE IF NOT EXISTS public.ceramic_pieces (
   formed_length_cm NUMERIC(5,2),
   formed_width_cm NUMERIC(5,2),
   formed_height_cm NUMERIC(5,2),
+  actual_formed_length_cm NUMERIC(5,2),
+  actual_formed_width_cm NUMERIC(5,2),
+  actual_formed_height_cm NUMERIC(5,2),
   initial_photo_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
