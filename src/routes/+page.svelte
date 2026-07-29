@@ -601,6 +601,7 @@
 	let dragOverStageId = $state<CeramicStage | null>(null);
 	let dragOverCardGroupKey = $state<string | null>(null);
 	let toastMessage = $state<string | null>(null);
+	let toastType = $state<'success' | 'warning' | 'error' | 'info'>('success');
 	let toastTimeout: ReturnType<typeof setTimeout>;
 
 	// Unified Pointer Drag State
@@ -957,7 +958,7 @@
 		);
 
 		if (invalidItems.length > 0) {
-			showToast(`Cannot merge: Items must share the same clay (${targetPiece.clay_body_name}), form type (${targetPiece.piece_type}), and stage!`);
+			showToast(`Cannot merge: Items must share the same clay (${targetPiece.clay_body_name}), form type (${targetPiece.piece_type}), and stage!`, 'warning');
 			return;
 		}
 
@@ -1050,8 +1051,9 @@
 		}
 	}
 
-	function showToast(msg: string) {
+	function showToast(msg: string, type: 'success' | 'warning' | 'error' | 'info' = 'success') {
 		toastMessage = msg;
+		toastType = type;
 		clearTimeout(toastTimeout);
 		toastTimeout = setTimeout(() => {
 			toastMessage = null;
@@ -1172,7 +1174,7 @@
 		);
 
 		if (invalidItems.length > 0) {
-			showToast(`Cannot merge: Items must share the same clay (${targetPiece.clay_body_name}), form type (${targetPiece.piece_type}), and stage!`);
+			showToast(`Cannot merge: Items must share the same clay (${targetPiece.clay_body_name}), form type (${targetPiece.piece_type}), and stage!`, 'warning');
 			draggedPieceId = null;
 			draggedBatchKey = null;
 			dragOverCardGroupKey = null;
@@ -1372,7 +1374,7 @@
 	function executeSplitBatch() {
 		resetDragState();
 		if (splitSelectedPieceIds.length === 0) {
-			showToast('Please select at least 1 piece to split.');
+			showToast('Please select at least 1 piece to split.', 'warning');
 			return;
 		}
 
@@ -5022,10 +5024,32 @@
 
 <!-- STAGE UPDATE FEEDBACK TOAST -->
 {#if toastMessage}
-	<div class="fixed bottom-6 right-6 z-50 bg-white dark:bg-stone-900 border border-[#81B29A]/50 text-stone-900 dark:text-stone-100 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4">
-		<div class="p-1 rounded-full bg-[#81B29A]/20 text-[#3B7258] dark:text-[#81B29A]">
-			<CheckCircle2 class="w-4 h-4" />
-		</div>
+	<div
+		class="fixed bottom-6 right-6 z-50 bg-white dark:bg-stone-900 border px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 {toastType === 'error'
+			? 'border-red-500/50 dark:border-red-500/50 text-stone-900 dark:text-stone-100'
+			: toastType === 'warning'
+				? 'border-amber-500/50 dark:border-amber-500/50 text-stone-900 dark:text-stone-100'
+				: toastType === 'info'
+					? 'border-sky-500/50 dark:border-sky-500/50 text-stone-900 dark:text-stone-100'
+					: 'border-[#81B29A]/50 text-stone-900 dark:text-stone-100'}"
+	>
+		{#if toastType === 'error'}
+			<div class="p-1 rounded-full bg-red-500/20 text-red-600 dark:text-red-400">
+				<AlertCircle class="w-4 h-4" />
+			</div>
+		{:else if toastType === 'warning'}
+			<div class="p-1 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400">
+				<AlertTriangle class="w-4 h-4" />
+			</div>
+		{:else if toastType === 'info'}
+			<div class="p-1 rounded-full bg-sky-500/20 text-sky-600 dark:text-sky-400">
+				<Info class="w-4 h-4" />
+			</div>
+		{:else}
+			<div class="p-1 rounded-full bg-[#81B29A]/20 text-[#3B7258] dark:text-[#81B29A]">
+				<CheckCircle2 class="w-4 h-4" />
+			</div>
+		{/if}
 		<span class="text-xs font-semibold">{toastMessage}</span>
 	</div>
 {/if}
