@@ -3992,7 +3992,7 @@
 										onclick={startEditActualFormedDimensions}
 										class="btn btn-xs btn-warning btn-outline font-bold"
 									>
-										+ Record Pre-Fire Size
+										+ Record Size
 									</button>
 								{/if}
 							</div>
@@ -4042,7 +4042,7 @@
 										onclick={startEditActualFiredDimensions}
 										class="btn btn-xs btn-success btn-outline font-bold"
 									>
-										+ Record Final Fired Size
+										+ Record Size
 									</button>
 								{/if}
 							</div>
