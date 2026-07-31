@@ -1,4 +1,9 @@
 @import "tailwindcss";
+
+@plugin "daisyui" {
+  themes: all;
+}
+
 @source ".";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -6,47 +11,95 @@
 @theme {
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --font-display: 'Outfit', system-ui, -apple-system, sans-serif;
-
-  --color-terracotta-50: #FAF0EC;
-  --color-terracotta-100: #F5DEC6;
-  --color-terracotta-200: #EBB6A5;
-  --color-terracotta-400: #E07A5F;
-  --color-terracotta-500: #C85A32;
-  --color-terracotta-600: #AB4522;
-  --color-terracotta-900: #4D1A0A;
-
-  --color-celadon-400: #81B29A;
-  --color-celadon-500: #579B7B;
-  --color-celadon-900: #1B3B2D;
-
-  --color-clay-100: #F4F1DE;
-  --color-clay-200: #E4DFC3;
-  --color-clay-800: #2C2827;
-  --color-clay-900: #1C1918;
-
-  --color-stoneware-800: #262322;
-  --color-stoneware-900: #181616;
 }
 
-/* Custom Pottery Utility Styles */
+/* Custom Pottery Utility Styles - Powered by daisyUI CSS Theme Variables */
 .ceramic-card {
-  background-color: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  position: relative;
+  z-index: 2 !important;
+  isolation: isolate;
+  background-color: var(--color-base-100) !important;
+  color: var(--color-base-content);
+  border: 1px solid var(--color-base-300);
   border-radius: 1rem;
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
-  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.08);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
-:where(.dark, .dark *) .ceramic-card,
-.dark .ceramic-card {
-  background-color: rgba(38, 35, 34, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3);
+/* daisyUI aura-dual component wrapper - aura light turns on strictly on hover with small aura size */
+.ceramic-card-aura {
+  @apply aura aura-dual aura-xs text-primary rounded-2xl w-full block;
+  --aura-padding: 0.0625rem !important;
+  --tw-duration: 16s;
+  animation-duration: 16s !important;
+  transition: all 0.3s ease;
+}
+
+/* OFF by default when NOT hovered */
+.ceramic-card-aura:not(:hover) {
+  background-image: none !important;
+  animation: none !important;
+}
+
+.ceramic-card-aura:not(:hover)::before,
+.ceramic-card-aura:not(:hover)::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  animation: none !important;
+}
+
+/* ON ONLY when HOVERED */
+.ceramic-card-aura:hover {
+  background-image: repeating-conic-gradient(from var(--aura-angle), transparent 0%, transparent 40%, currentColor 50%) !important;
+  animation: aura 16s linear infinite !important;
+}
+
+.ceramic-card-aura:hover::before {
+  content: "" !important;
+  display: block !important;
+  opacity: 0.7 !important;
+  filter: blur(0.25rem) !important;
+  animation: aura 16s linear infinite !important;
+}
+
+.ceramic-card-aura:hover::after {
+  content: "" !important;
+  display: block !important;
+  opacity: 0.3 !important;
+  filter: blur(1rem) !important;
+  animation: aura 16s linear infinite !important;
 }
 
 .ceramic-card:hover {
-  border-color: rgba(224, 122, 95, 0.4);
+  border-color: var(--color-primary);
+}
+
+/* Disable aura gradient & animation completely while card is being dragged */
+.ceramic-card-aura:has([aria-grabbed="true"]),
+.ceramic-card-aura:has(.opacity-40),
+.ceramic-card-aura:has([aria-grabbed="true"]):hover,
+.ceramic-card-aura:has(.opacity-40):hover {
+  background-image: none !important;
+  animation: none !important;
+}
+
+.ceramic-card-aura:has([aria-grabbed="true"])::before,
+.ceramic-card-aura:has([aria-grabbed="true"])::after,
+.ceramic-card-aura:has(.opacity-40)::before,
+.ceramic-card-aura:has(.opacity-40)::after,
+.ceramic-card-aura:has([aria-grabbed="true"]):hover::before,
+.ceramic-card-aura:has([aria-grabbed="true"]):hover::after,
+.ceramic-card-aura:has(.opacity-40):hover::before,
+.ceramic-card-aura:has(.opacity-40):hover::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  animation: none !important;
+}
+
+.ceramic-card:hover {
+  border-color: var(--color-primary);
 }
 
 .cone-badge {
@@ -62,64 +115,28 @@
 }
 
 .cone-06 {
-  background-color: rgba(224, 122, 95, 0.15);
-  color: #C85A32;
-  border: 1px solid rgba(224, 122, 95, 0.3);
-}
-
-:where(.dark, .dark *) .cone-06,
-.dark .cone-06 {
-  background-color: rgba(224, 122, 95, 0.15);
-  color: #F2CC8F;
-  border: 1px solid rgba(242, 204, 143, 0.3);
+  background-color: color-mix(in oklch, var(--color-warning) 15%, transparent);
+  color: var(--color-warning);
+  border: 1px solid color-mix(in oklch, var(--color-warning) 40%, transparent);
 }
 
 .cone-6 {
-  background-color: rgba(129, 178, 154, 0.15);
-  color: #3B7258;
-  border: 1px solid rgba(129, 178, 154, 0.4);
-}
-
-:where(.dark, .dark *) .cone-6,
-.dark .cone-6 {
-  background-color: rgba(129, 178, 154, 0.15);
-  color: #81B29A;
-  border: 1px solid rgba(129, 178, 154, 0.3);
+  background-color: color-mix(in oklch, var(--color-primary) 15%, transparent);
+  color: var(--color-primary);
+  border: 1px solid color-mix(in oklch, var(--color-primary) 40%, transparent);
 }
 
 .cone-10 {
-  background-color: rgba(230, 57, 70, 0.15);
-  color: #C12A36;
-  border: 1px solid rgba(230, 57, 70, 0.4);
+  background-color: color-mix(in oklch, var(--color-error) 15%, transparent);
+  color: var(--color-error);
+  border: 1px solid color-mix(in oklch, var(--color-error) 40%, transparent);
 }
 
-:where(.dark, .dark *) .cone-10,
-.dark .cone-10 {
-  background-color: rgba(230, 57, 70, 0.15);
-  color: #E63946;
-  border: 1px solid rgba(230, 57, 70, 0.3);
-}
-
-/* Global Tailwind Scrollbar Styles */
-@layer base {
+/* Global Scrollbar Styles */
+/* @layer base {
   * {
     scrollbar-width: thin;
-    scrollbar-color: #d6d3d1 transparent;
-  }
-
-  :where(.dark, .dark *) {
-    scrollbar-color: #44403c transparent;
-  }
-
-  /* Custom Studio Date Input Styling */
-  input[type="date"] {
-    color-scheme: light;
-    accent-color: #E07A5F;
-  }
-
-  :where(.dark, .dark *) input[type="date"],
-  .dark input[type="date"] {
-    color-scheme: dark;
+    scrollbar-color: var(--color-base-300) transparent;
   }
 
   input[type="date"]::-webkit-calendar-picker-indicator {
@@ -133,4 +150,4 @@
   input[type="date"]::-webkit-calendar-picker-indicator:hover {
     opacity: 1;
   }
-}
+} */

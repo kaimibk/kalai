@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="h-full antialiased dark">
+<html lang="en" class="h-full antialiased dark" data-theme="coffee">
 	<head>
 		<meta charset="utf-8" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.png" />
@@ -10,14 +10,19 @@
 		<script>
 			(function() {
 				try {
-					var theme = localStorage.getItem('theme');
+					var theme = localStorage.getItem('theme') || 'coffee';
+					if (theme === 'light') theme = 'retro';
+					if (theme === 'dark') theme = 'coffee';
 					var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-					if (theme === 'dark' || (!theme && prefersDark) || (theme === 'system' && prefersDark)) {
+					var targetTheme = theme;
+					if (theme === 'system') {
+						targetTheme = prefersDark ? 'coffee' : 'retro';
+					}
+					document.documentElement.setAttribute('data-theme', targetTheme);
+					if (targetTheme === 'coffee') {
 						document.documentElement.classList.add('dark');
-					} else if (theme === 'light') {
-						document.documentElement.classList.remove('dark');
 					} else {
-						document.documentElement.classList.add('dark');
+						document.documentElement.classList.remove('dark');
 					}
 				} catch (e) {}
 			})();
@@ -30,7 +35,7 @@
 
 		%sveltekit.head%
 	</head>
-	<body data-sveltekit-preload-data="hover" class="h-full font-sans antialiased bg-[#F7F4EF] text-stone-800 dark:bg-[#181616] dark:text-[#F4F1DE] transition-colors duration-200 selection:bg-[#E07A5F] selection:text-white">
+	<body data-sveltekit-preload-data="hover" class="h-full font-sans antialiased bg-base-200 text-base-content transition-colors duration-200">
 		<div style="display: contents" class="h-full">%sveltekit.body%</div>
 	</body>
 </html>
