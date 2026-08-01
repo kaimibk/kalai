@@ -2070,22 +2070,87 @@
 
 	function addGlazeTagToPiece() {
 		if (!selectedPiece || !tagGlazeName.trim()) return;
-		const newLayer: PieceGlazeLayer = {
-			id: `gl-${Date.now()}`,
-			piece_id: selectedPiece.id,
-			glaze_id: selectedGlazeOption !== 'custom' ? selectedGlazeOption : undefined,
-			glaze_name: tagGlazeName,
-			manufacturer: tagGlazeManufacturer,
-			layer_order: (selectedPiece.glaze_layers?.length || 0) + 1,
-			coat_count: tagGlazeCoats,
-			application_method: tagGlazeMethod,
-			location: tagGlazeLocation,
-			created_at: new Date()
-		};
 
-		const updatedGlazes = [...(selectedPiece.glaze_layers || []), newLayer];
-		selectedPiece = { ...selectedPiece, glaze_layers: updatedGlazes };
-		pieces = pieces.map(p => p.id === selectedPiece!.id ? selectedPiece! : p);
+		const currentGlazeSig = selectedPiece.glaze_layers 
+			? selectedPiece.glaze_layers.map(g => g.glaze_name).sort().join('|') 
+			: '';
+
+		const targetPieces = selectedPiece.batch_id
+			? pieces.filter(p => 
+				p.batch_id === selectedPiece!.batch_id &&
+				p.stage === selectedPiece!.stage &&
+				p.is_failed === selectedPiece!.is_failed &&
+				((p.glaze_layers ? p.glaze_layers.map(g => g.glaze_name).sort().join('|') : '') === currentGlazeSig)
+			  )
+			: [selectedPiece];
+
+		const targetPieceIds = new Set(targetPieces.map(p => p.id));
+		const now = new Date();
+
+		pieces = pieces.map(p => {
+			if (targetPieceIds.has(p.id)) {
+				const newLayer: PieceGlazeLayer = {
+					id: `gl-${Date.now()}-${p.id}`,
+					piece_id: p.id,
+					glaze_id: selectedGlazeOption !== 'custom' ? selectedGlazeOption : undefined,
+					glaze_name: tagGlazeName,
+					manufacturer: tagGlazeManufacturer,
+					layer_order: (p.glaze_layers?.length || 0) + 1,
+					coat_count: tagGlazeCoats,
+					application_method: tagGlazeMethod,
+					location: tagGlazeLocation,
+					created_at: now
+				};
+				const updatedGlazes = [...(p.glaze_layers || []), newLayer];
+				const updatedPiece = { ...p, glaze_layers: updatedGlazes };
+				if (p.id === selectedPiece!.id) {
+					selectedPiece = updatedPiece;
+				}
+				return updatedPiece;
+			}
+			return p;
+		});
+
+		if (targetPieces.length > 1) {
+			showToast(`Applied glaze "${tagGlazeName}" to all ${targetPieces.length} pieces in active batch!`);
+		} else {
+			showToast(`Applied glaze "${tagGlazeName}" to piece!`);
+		}
+	}
+
+	function removeGlazeLayer(layerIndex: number) {
+		if (!selectedPiece || !selectedPiece.glaze_layers || !selectedPiece.glaze_layers[layerIndex]) return;
+
+		const currentGlazeSig = selectedPiece.glaze_layers.map(g => g.glaze_name).sort().join('|');
+
+		const targetPieces = selectedPiece.batch_id
+			? pieces.filter(p => 
+				p.batch_id === selectedPiece!.batch_id &&
+				p.stage === selectedPiece!.stage &&
+				p.is_failed === selectedPiece!.is_failed &&
+				((p.glaze_layers ? p.glaze_layers.map(g => g.glaze_name).sort().join('|') : '') === currentGlazeSig)
+			  )
+			: [selectedPiece];
+
+		const targetPieceIds = new Set(targetPieces.map(p => p.id));
+
+		pieces = pieces.map(p => {
+			if (targetPieceIds.has(p.id) && p.glaze_layers) {
+				const updatedGlazes = p.glaze_layers.filter((_, idx) => idx !== layerIndex).map((g, idx) => ({ ...g, layer_order: idx + 1 }));
+				const updatedPiece = { ...p, glaze_layers: updatedGlazes };
+				if (p.id === selectedPiece!.id) {
+					selectedPiece = updatedPiece;
+				}
+				return updatedPiece;
+			}
+			return p;
+		});
+
+		if (targetPieces.length > 1) {
+			showToast(`Removed glaze layer from all ${targetPieces.length} pieces in active batch`);
+		} else {
+			showToast(`Removed glaze layer`);
+		}
 	}
 
 	function handleAddCustomLibraryGlaze(e: Event) {
@@ -3516,6 +3581,8 @@
 
 <!-- MODAL 2: PIECE GLAZE TAGGING & PHOTO HISTORY -->
 {#if selectedPiece}
+	{@const currentGlazeSig = selectedPiece.glaze_layers ? selectedPiece.glaze_layers.map(g => g.glaze_name).sort().join('|') : ''}
+	{@const activeBatchCount = selectedPiece.batch_id ? pieces.filter(p => p.batch_id === selectedPiece!.batch_id && p.stage === selectedPiece!.stage && p.is_failed === selectedPiece!.is_failed && ((p.glaze_layers ? p.glaze_layers.map(g => g.glaze_name).sort().join('|') : '') === currentGlazeSig)).length : 1}
 	<div 
 		role="dialog" 
 		aria-modal="true"
@@ -4108,6 +4175,12 @@
 						<Droplets class="w-4 h-4 text-success" />
 						<span>Applied Glaze Tagging</span>
 					</h4>
+					{#if activeBatchCount > 1}
+						<span class="badge badge-primary badge-outline text-[10px] font-bold gap-1" title="Applying or removing glaze will affect all pieces in this stack">
+							<Layers2 class="w-3 h-3" />
+							<span>Applies to active batch ({activeBatchCount} pcs)</span>
+						</span>
+					{/if}
 				</div>
 
 				{#if selectedPiece.glaze_layers && selectedPiece.glaze_layers.length > 0}
@@ -4135,6 +4208,14 @@
 										</span>
 									</div>
 								</div>
+								<button 
+									type="button"
+									onclick={() => removeGlazeLayer(i)}
+									class="btn btn-ghost btn-xs text-error hover:bg-error/10 p-1"
+									title="Remove Glaze Layer"
+								>
+									<Trash2 class="w-3.5 h-3.5" />
+								</button>
 							</div>
 						{/each}
 					</div>
@@ -4239,7 +4320,7 @@
 							class="btn btn-sm btn-success text-success-content font-bold shadow gap-1.5"
 						>
 							<Plus class="w-4 h-4" />
-							<span>Tag Glaze Layer</span>
+							<span>Tag Glaze Layer {activeBatchCount > 1 ? `(${activeBatchCount} Pcs)` : ''}</span>
 						</button>
 					</div>
 				</div>
