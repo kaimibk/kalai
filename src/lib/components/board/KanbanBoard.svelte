@@ -1,5 +1,6 @@
 <script lang="ts">
 	import FilterX from 'lucide-svelte/icons/filter-x';
+	import AlertTriangle from 'lucide-svelte/icons/alert-triangle';
 	import type { CeramicPiece, CeramicStage, KanbanDisplayGroup } from '$lib/types/database';
 	import { STAGES } from '$lib/constants/stages';
 	import PieceCard from '$lib/components/board/PieceCard.svelte';
@@ -148,9 +149,15 @@
 				>
 					<!-- Column Header -->
 					<div class="flex items-center justify-between px-2 py-1.5 border-b border-base-300 mb-2.5 flex-shrink-0">
-						<div class="flex items-center gap-2">
+						<div class="flex items-center gap-1.5 flex-wrap">
 							<span class="text-base">{stageInfo.icon}</span>
 							<h3 class="font-display text-m font-extrabold text-base-content tracking-tight">{stageInfo.label}</h3>
+							{#if stageInfo.id === 'done' && showLossArchive}
+								<span class="badge badge-error badge-xs font-bold gap-1 text-[9px] uppercase tracking-wider animate-pulse text-error-content shadow-xs">
+									<AlertTriangle class="w-2.5 h-2.5" />
+									<span>Loss Archive</span>
+								</span>
+							{/if}
 						</div>
 						<span class="badge {stageInfo.badgeColor} badge-sm font-bold">
 							{columnPieces.length}

@@ -47,7 +47,7 @@
 		aria-grabbed={draggedPieceId === piece.id}
 		draggable={false}
 		onpointerdown={(e) => onPointerDownPiece(e, piece.id, piece.title)}
-		class="ceramic-card relative z-10 snap-start p-3.5 rounded-xl border border-base-300 group space-y-3 cursor-grab active:cursor-grabbing select-none shadow-md hover:shadow-xl transition-all duration-200 min-w-0 {piece.is_failed ? 'border-2 border-error bg-error/10 border-l-4 border-l-error shadow-error/10' : ''} {draggedPieceId === piece.id ? 'opacity-40 scale-95 border-dashed border-primary' : ''} {isCardHovered ? 'ring-2 ring-primary border-primary bg-primary/15' : ''}"
+		class="ceramic-card relative z-10 snap-start p-3.5 rounded-xl border border-base-300 group space-y-3 cursor-grab active:cursor-grabbing select-none shadow-md hover:shadow-xl transition-all duration-200 min-w-0 {piece.is_failed ? 'border-2 border-error/70 bg-error/10 dark:bg-error/15 border-l-4 border-l-error shadow-error/15' : ''} {draggedPieceId === piece.id ? 'opacity-40 scale-95 border-dashed border-primary' : ''} {isCardHovered ? 'ring-2 ring-primary border-primary bg-primary/15' : ''}"
 	>
 		<!-- Merge Hover Highlight Banner -->
 		{#if isCardHovered}
@@ -59,10 +59,24 @@
 
 		<!-- Card Top Tags -->
 		<div class="flex items-center justify-between gap-1">
-			<span class="badge badge-outline badge-sm font-semibold text-[10px] uppercase tracking-wider text-base-content/70">
-				{piece.piece_type}
-			</span>
+			<div class="flex items-center gap-1 truncate">
+				{#if piece.is_failed}
+					<span class="badge badge-error badge-sm font-extrabold text-[10px] gap-1 text-error-content shadow-xs">
+						<AlertTriangle class="w-3 h-3 flex-shrink-0" />
+						<span>FAILED</span>
+					</span>
+				{:else}
+					<span class="badge badge-outline badge-sm font-semibold text-[10px] uppercase tracking-wider text-base-content/70">
+						{piece.piece_type}
+					</span>
+				{/if}
+			</div>
 			<div class="flex items-center gap-1">
+				{#if piece.is_failed}
+					<span class="badge badge-outline badge-error badge-sm font-semibold text-[10px]">
+						{piece.piece_type}
+					</span>
+				{/if}
 				<span class="badge badge-accent badge-sm font-semibold text-[10px]">
 					{piece.target_glaze_cone}
 				</span>
@@ -77,7 +91,14 @@
 				class="w-full h-28 rounded-lg overflow-hidden relative bg-base-200 border border-base-300 text-left cursor-pointer group/photo block"
 				title="Click to view details & photos"
 			>
-				<img src={piece.initial_photo_url} alt={piece.title} draggable={false} class="w-full h-full object-cover group-hover/photo:scale-105 transition duration-300 pointer-events-none select-none" />
+				<img src={piece.initial_photo_url} alt={piece.title} draggable={false} class="w-full h-full object-cover group-hover/photo:scale-105 transition duration-300 pointer-events-none select-none {piece.is_failed ? 'grayscale-[25%] opacity-90' : ''}" />
+				{#if piece.is_failed}
+					<div class="absolute inset-0 bg-error/10 mix-blend-multiply pointer-events-none"></div>
+					<span class="absolute bottom-2 left-2 text-[10px] font-extrabold badge badge-error text-error-content gap-1 shadow-sm">
+						<AlertTriangle class="w-3 h-3" />
+						<span>Loss Archive</span>
+					</span>
+				{/if}
 			</button>
 		{/if}
 
@@ -89,10 +110,15 @@
 				class="text-left w-full hover:underline focus:outline-hidden group/title cursor-pointer block"
 				title="Click to view details"
 			>
-				<h4 class="font-display font-bold text-sm text-base-content group-hover/title:text-primary transition leading-snug truncate">
+				<h4 class="font-display font-bold text-sm text-base-content group-hover/title:text-primary transition leading-snug truncate {piece.is_failed ? 'text-error font-extrabold' : ''}">
 					{piece.title}
 				</h4>
 			</button>
+			{#if piece.is_failed && piece.failure_reason}
+				<p class="text-[10.5px] font-semibold text-error bg-error/10 px-2 py-0.5 rounded border border-error/20 truncate" title={`Failure reason: ${piece.failure_reason}`}>
+					Reason: {piece.failure_reason}
+				</p>
+			{/if}
 			<div class="flex items-center gap-1.5 flex-wrap text-[11px] text-success font-medium">
 				<span>{piece.clay_body_name}</span>
 				{#if piece.weight_grams}

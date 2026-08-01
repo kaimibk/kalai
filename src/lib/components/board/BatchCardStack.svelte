@@ -51,7 +51,7 @@
 			aria-grabbed={isGrabbed}
 			draggable={false}
 			onpointerdown={(e) => onPointerDownBatch(e, group.batchId!, stageId, group.glazeSignature || '', group.batchTitle || 'Batch')}
-			class="ceramic-card relative z-10 snap-start p-3.5 rounded-xl border border-base-300 border-l-4 border-l-primary group space-y-3 cursor-grab active:cursor-grabbing select-none shadow-lg min-w-0 {group.primaryPiece.is_failed ? 'border-2 border-error bg-error/10 border-l-4 border-l-error shadow-error/10' : ''} {isGrabbed ? 'opacity-40 scale-95 border-dashed border-primary' : ''} {isCardHovered ? 'ring-2 ring-primary border-primary bg-primary/15' : ''}"
+			class="ceramic-card relative z-10 snap-start p-3.5 rounded-xl border border-base-300 border-l-4 border-l-primary group space-y-3 cursor-grab active:cursor-grabbing select-none shadow-lg min-w-0 {group.primaryPiece.is_failed ? 'border-2 border-error/70 bg-error/10 dark:bg-error/15 border-l-4 border-l-error shadow-error/15' : ''} {isGrabbed ? 'opacity-40 scale-95 border-dashed border-primary' : ''} {isCardHovered ? 'ring-2 ring-primary border-primary bg-primary/15' : ''}"
 		>
 			<!-- Merge Hover Highlight Banner -->
 			{#if isCardHovered}
@@ -87,11 +87,19 @@
 					class="w-full h-28 rounded-lg overflow-hidden relative bg-base-200 border border-base-300 text-left cursor-pointer group/photo block"
 					title="Click to view details & photos"
 				>
-					<img src={group.primaryPiece.initial_photo_url} alt={group.batchTitle} draggable={false} class="w-full h-full object-cover group-hover/photo:scale-105 transition duration-300 pointer-events-none select-none" />
-					<span class="absolute bottom-2 left-2 text-[10px] font-bold badge badge-neutral gap-1">
-						<Boxes class="w-3 h-3 text-primary" />
-						<span>{group.primaryPiece.piece_type} Stack</span>
-					</span>
+					<img src={group.primaryPiece.initial_photo_url} alt={group.batchTitle} draggable={false} class="w-full h-full object-cover group-hover/photo:scale-105 transition duration-300 pointer-events-none select-none {group.primaryPiece.is_failed ? 'grayscale-[25%] opacity-90' : ''}" />
+					{#if group.primaryPiece.is_failed}
+						<div class="absolute inset-0 bg-error/10 mix-blend-multiply pointer-events-none"></div>
+						<span class="absolute bottom-2 left-2 text-[10px] font-extrabold badge badge-error text-error-content gap-1 shadow-sm">
+							<AlertTriangle class="w-3 h-3" />
+							<span>Failed Stack</span>
+						</span>
+					{:else}
+						<span class="absolute bottom-2 left-2 text-[10px] font-bold badge badge-neutral gap-1">
+							<Boxes class="w-3 h-3 text-primary" />
+							<span>{group.primaryPiece.piece_type} Stack</span>
+						</span>
+					{/if}
 				</button>
 			{/if}
 
@@ -103,10 +111,15 @@
 					class="text-left w-full hover:underline focus:outline-hidden group/title cursor-pointer block"
 					title="Click to view details"
 				>
-					<h4 class="font-display font-extrabold text-sm text-base-content group-hover/title:text-primary transition leading-snug truncate">
+					<h4 class="font-display font-extrabold text-sm text-base-content group-hover/title:text-primary transition leading-snug truncate {group.primaryPiece.is_failed ? 'text-error font-extrabold' : ''}">
 						{group.batchTitle}
 					</h4>
 				</button>
+				{#if group.primaryPiece.is_failed && group.primaryPiece.failure_reason}
+					<p class="text-[10.5px] font-semibold text-error bg-error/10 px-2 py-0.5 rounded border border-error/20 truncate" title={`Failure reason: ${group.primaryPiece.failure_reason}`}>
+						Reason: {group.primaryPiece.failure_reason}
+					</p>
+				{/if}
 				<div class="flex items-center gap-1.5 flex-wrap text-[11px] text-success font-medium">
 					<span>{group.primaryPiece.clay_body_name}</span>
 					{#if group.primaryPiece.weight_grams}
@@ -198,7 +211,7 @@
 	</div>
 
 	<!-- Stack Layer 2 (Middle Stack Card) -->
-	<div class="ceramic-card bg-base-200 border border-base-300 h-full w-full pointer-events-none opacity-90 rounded-xl"></div>
+	<div class="ceramic-card bg-base-200 border border-base-300 h-full w-full pointer-events-none opacity-90 rounded-xl {group.primaryPiece.is_failed ? 'border-error/50 bg-error/10' : ''}"></div>
 	<!-- Stack Layer 3 (Back Stack Card) -->
-	<div class="ceramic-card bg-base-300 border border-base-300 h-full w-full pointer-events-none opacity-75 rounded-xl"></div>
+	<div class="ceramic-card bg-base-300 border border-base-300 h-full w-full pointer-events-none opacity-75 rounded-xl {group.primaryPiece.is_failed ? 'border-error/40 bg-error/15' : ''}"></div>
 </div>
