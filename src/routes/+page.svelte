@@ -36,6 +36,12 @@
 	import ChevronDown from 'lucide-svelte/icons/chevron-down';
 	import GripVertical from 'lucide-svelte/icons/grip-vertical';
 	import Ruler from 'lucide-svelte/icons/ruler';
+	import Table from 'lucide-svelte/icons/table';
+	import Columns from 'lucide-svelte/icons/columns';
+	import LayoutGrid from 'lucide-svelte/icons/layout-grid';
+	import ArrowUpDown from 'lucide-svelte/icons/arrow-up-down';
+	import ArrowUp from 'lucide-svelte/icons/arrow-up';
+	import ArrowDown from 'lucide-svelte/icons/arrow-down';
 	import type { CeramicPiece, ClayBody, CeramicStage, PieceStageLog, PieceGlazeLayer, GlazeRecipe, GlazeStyle, GlazeLocation, PyrometricCone, Manufacturer, PieceType, PieceBatch } from '$lib/types/database';
 	import CallyDatePicker from '$lib/components/CallyDatePicker.svelte';
 
@@ -391,6 +397,70 @@
 	let showLossArchive = $state(false);
 	let selectedPiece = $state<CeramicPiece | null>(null);
 	let mobileActiveStage = $state<CeramicStage | 'all'>('all');
+
+	// View Mode & Table Sorting State
+	let viewMode = $state<'lanes' | 'table'>('lanes');
+	let tableSortField = $state<'title' | 'stage' | 'clay' | 'weight' | 'due_date' | 'created_at'>('created_at');
+	let tableSortAsc = $state<boolean>(false);
+
+	let tableDisplayedPieces = $derived.by(() => {
+		const source = showLossArchive ? filteredPieces : filteredPieces.filter(p => !p.is_failed);
+		return [...source].sort((a, b) => {
+			let cmp = 0;
+			if (tableSortField === 'title') {
+				cmp = a.title.localeCompare(b.title);
+			} else if (tableSortField === 'stage') {
+				const stageOrder = STAGES.map(s => s.id);
+				cmp = stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage);
+			} else if (tableSortField === 'clay') {
+				cmp = (a.clay_body_name || '').localeCompare(b.clay_body_name || '');
+			} else if (tableSortField === 'weight') {
+				cmp = (a.weight_grams || 0) - (b.weight_grams || 0);
+			} else if (tableSortField === 'due_date') {
+				const tA = a.due_date ? new Date(a.due_date).getTime() : 0;
+				const tB = b.due_date ? new Date(b.due_date).getTime() : 0;
+				cmp = tA - tB;
+			} else if (tableSortField === 'created_at') {
+				const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+				const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+				cmp = tA - tB;
+			}
+			return tableSortAsc ? cmp : -cmp;
+		});
+	});
+
+	function toggleTableSort(field: 'title' | 'stage' | 'clay' | 'weight' | 'due_date' | 'created_at') {
+		if (tableSortField === field) {
+			tableSortAsc = !tableSortAsc;
+		} else {
+			tableSortField = field;
+			tableSortAsc = true;
+		}
+	}
+
+	function movePieceToStage(pieceId: string, targetStage: CeramicStage) {
+		const targetStageObj = STAGES.find(s => s.id === targetStage);
+		const stageName = targetStageObj?.label || targetStage;
+		const now = new Date();
+		pieces = pieces.map(p => {
+			if (p.id === pieceId) {
+				if (p.stage === targetStage) return p;
+				const isMovingOutFromBacklog = p.stage === 'backlog' && targetStage !== 'backlog';
+				const isClearingFailed = p.is_failed && targetStage !== 'done';
+				return {
+					...p,
+					stage: targetStage,
+					is_failed: targetStage === 'done' ? p.is_failed : false,
+					failure_stage: isClearingFailed ? null : p.failure_stage,
+					failure_reason: isClearingFailed ? null : p.failure_reason,
+					started_at: isMovingOutFromBacklog ? (p.started_at || now) : p.started_at,
+					updated_at: now
+				};
+			}
+			return p;
+		});
+		showToast(`Moved piece to ${stageName}`);
+	}
 
 	// New Piece Modal State (With Multi-Piece Batch Support)
 	let isNewPieceModalOpen = $state(false);
@@ -748,8 +818,8 @@
 
 	function isInteractiveTarget(target: EventTarget | null): boolean {
 		if (!target || !(target instanceof Element)) return false;
-		const btn = target.closest('button, input, select, a, textarea, [role="button"]');
-		return btn !== null;
+		const actionEl = target.closest('button, input, select, a, textarea, [data-action-button]');
+		return actionEl !== null;
 	}
 
 	function handlePointerDownPiece(e: PointerEvent, pieceId: string, label: string) {
@@ -2267,6 +2337,28 @@
 						</div>
 					{/if}
 				</div>
+
+				<!-- View Mode Toggle (Lanes vs Table) -->
+				<div class="join bg-base-200/80 border border-base-300 p-0.5 rounded-xl shadow-xs">
+					<button
+						type="button"
+						onclick={() => viewMode = 'lanes'}
+						class="join-item btn btn-xs sm:btn-sm gap-1.5 transition-all {viewMode === 'lanes' ? 'btn-primary font-bold shadow-xs' : 'btn-ghost text-base-content/70 hover:text-base-content'}"
+						title="Visualize pieces as Kanban Lanes"
+					>
+						<Columns class="w-3.5 h-3.5" />
+						<span class="hidden sm:inline">Lanes</span>
+					</button>
+					<button
+						type="button"
+						onclick={() => viewMode = 'table'}
+						class="join-item btn btn-xs sm:btn-sm gap-1.5 transition-all {viewMode === 'table' ? 'btn-primary font-bold shadow-xs' : 'btn-ghost text-base-content/70 hover:text-base-content'}"
+						title="Visualize pieces as a DaisyUI Table"
+					>
+						<Table class="w-3.5 h-3.5" />
+						<span class="hidden sm:inline">Table</span>
+					</button>
+				</div>
 			</div>
 		</div>
 
@@ -2611,121 +2703,118 @@
 		{/if}
 	</div>
 
-	<!-- MOBILE/TABLET STAGE SELECTOR TABS (Visible under 1400px width `< 2xl`) -->
-	<div class="w-full overflow-x-auto pb-2 pt-0.5 no-scrollbar flex-shrink-0 2xl:hidden">
-		<div class="tabs tabs-boxed bg-base-200 border border-base-300 p-1 flex items-center justify-start gap-1 w-max min-w-full">
-			<button
-				type="button"
-				onclick={() => mobileActiveStage = 'all'}
-				class="tab tab-sm font-bold gap-1.5 whitespace-nowrap {mobileActiveStage === 'all' ? 'tab-active btn-primary' : 'text-base-content/70'}"
-			>
-				<span>All Stages</span>
-				<span class="badge badge-sm badge-neutral">
-					{activePieces.length}
-				</span>
-			</button>
-
-			{#each STAGES as stageInfo}
-				{@const count = stageInfo.id === 'done'
-					? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done').length : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed).length)
-					: activePieces.filter(p => p.stage === stageInfo.id).length}
+				{#if viewMode === 'lanes'}
+		<!-- MOBILE/TABLET STAGE SELECTOR TABS (Visible under 1400px width `< 2xl`) -->
+		<div class="w-full overflow-x-auto pb-2 pt-0.5 no-scrollbar flex-shrink-0 2xl:hidden">
+			<div class="tabs tabs-boxed bg-base-200 border border-base-300 p-1 flex items-center justify-start gap-1 w-max min-w-full">
 				<button
 					type="button"
-					onclick={() => mobileActiveStage = stageInfo.id}
-					class="tab tab-sm font-bold gap-1.5 whitespace-nowrap {mobileActiveStage === stageInfo.id ? 'tab-active btn-primary' : 'text-base-content/70'}"
+					onclick={() => mobileActiveStage = 'all'}
+					class="tab tab-sm font-bold gap-1.5 whitespace-nowrap {mobileActiveStage === 'all' ? 'tab-active btn-primary' : 'text-base-content/70'}"
 				>
-					<span>{stageInfo.icon}</span>
-					<span>{stageInfo.label}</span>
-					<span class="badge badge-sm {stageInfo.badgeColor} font-bold">
-						{count}
+					<span>All Stages</span>
+					<span class="badge badge-sm badge-neutral">
+						{activePieces.length}
 					</span>
 				</button>
-			{/each}
-		</div>
-	</div>
 
-	<!-- STREAMLINED 6-STAGE RESPONSIVE KANBAN BOARD CONTAINER -->
-	<div bind:this={boardContainerRef} class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto {touchDragActive ? 'snap-none scroll-auto' : 'snap-x snap-mandatory scroll-smooth'} pb-2">
-		<div class="flex-1 min-h-0 flex justify-start {touchDragActive ? 'snap-none' : 'snap-x snap-mandatory'} gap-3.5 pb-2 min-w-full w-max px-2 sm:px-4">
-			{#each STAGES as stageInfo}
-				{@const columnPieces = stageInfo.id === 'done'
-					? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done') : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed))
-					: activePieces.filter(p => p.stage === stageInfo.id)}
-				{#if mobileActiveStage === 'all' || mobileActiveStage === stageInfo.id}
-					<div 
-						role="region"
-						aria-label={stageInfo.label}
-						data-stage-id={stageInfo.id}
-						class="{mobileActiveStage === stageInfo.id ? 'w-full min-w-full' : 'w-[85vw] min-w-[280px] max-w-[340px]'} flex-shrink-0 snap-center snap-always rounded-2xl p-3 backdrop-blur-xs transition-all duration-200 flex flex-col flex-1 min-h-[480px] max-h-[70vh] overflow-hidden shadow-sm {stageInfo.color} {dragOverStageId === stageInfo.id ? 'ring-2 ring-primary scale-[1.01] shadow-lg' : ''}"
-						ondragover={(e) => handleDragOver(e, stageInfo.id)}
-						ondragenter={(e) => handleDragOver(e, stageInfo.id)}
-						ondragleave={(e) => handleDragLeave(e, stageInfo.id)}
-						ondrop={(e) => handleDrop(e, stageInfo.id)}
+				{#each STAGES as stageInfo}
+					{@const count = stageInfo.id === 'done'
+						? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done').length : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed).length)
+						: activePieces.filter(p => p.stage === stageInfo.id).length}
+					<button
+						type="button"
+						onclick={() => mobileActiveStage = stageInfo.id}
+						class="tab tab-sm font-bold gap-1.5 whitespace-nowrap {mobileActiveStage === stageInfo.id ? 'tab-active btn-primary' : 'text-base-content/70'}"
 					>
-					
-					<!-- Column Header -->
-					<div class="flex items-center justify-between px-2 py-1.5 border-b border-base-300 mb-2.5 flex-shrink-0">
-						<div class="flex items-center gap-2">
-							<span class="text-base">{stageInfo.icon}</span>
-							<h3 class="font-display text-m font-extrabold text-base-content tracking-tight">{stageInfo.label}</h3>
-						</div>
-						<span class="badge {stageInfo.badgeColor} badge-sm font-bold">
-							{columnPieces.length}
+						<span>{stageInfo.icon}</span>
+						<span>{stageInfo.label}</span>
+						<span class="badge badge-sm {stageInfo.badgeColor} font-bold">
+							{count}
 						</span>
-					</div>
+					</button>
+				{/each}
+			</div>
+		</div>
 
-					<!-- Cards Column -->
-					<div class="space-y-3 flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden snap-y snap-mandatory scroll-smooth px-1.5 py-1" role="list">
-						{#each getStageCardGroups(stageInfo.id) as group}
-							{@const groupKey = group.isBatch ? group.batchId! : group.primaryPiece.id}
-							{@const isCardHovered = dragOverCardGroupKey === groupKey}
-							{#if group.isBatch}
-								<!-- DAISYUI NATIVE STACKED BATCH CARD CONTAINER -->
-								<div 
-									role="region"
-									aria-label="Stacked batch card"
-									data-card-group-key={groupKey}
-									aria-grabbed={draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}`}
-									class="stack w-full my-2 transition-transform duration-200 {isCardHovered ? 'scale-[1.02]' : ''}"
-									ondragover={(e) => handleCardDragOver(e, group)}
-									ondragleave={(e) => handleCardDragLeave(e, group)}
-									ondrop={(e) => handleCardDrop(e, group)}
+		<!-- STREAMLINED 6-STAGE RESPONSIVE KANBAN BOARD CONTAINER -->
+		<div bind:this={boardContainerRef} class="w-full flex-1 min-h-0 flex flex-col overflow-x-auto {touchDragActive ? 'snap-none scroll-auto' : 'snap-x snap-mandatory scroll-smooth'} pb-2">
+			<div class="flex-1 min-h-0 flex justify-start {touchDragActive ? 'snap-none' : 'snap-x snap-mandatory'} gap-3.5 pb-2 min-w-full w-max px-2 sm:px-4">
+				{#each STAGES as stageInfo}
+					{@const columnPieces = stageInfo.id === 'done'
+						? (showLossArchive ? filteredPieces.filter(p => p.stage === 'done') : filteredPieces.filter(p => p.stage === 'done' && !p.is_failed))
+						: activePieces.filter(p => p.stage === stageInfo.id)}
+					{#if mobileActiveStage === 'all' || mobileActiveStage === stageInfo.id}
+						<div 
+							role="region"
+							aria-label={stageInfo.label}
+							data-stage-id={stageInfo.id}
+							class="{mobileActiveStage === stageInfo.id ? 'w-full min-w-full' : 'w-[85vw] min-w-[280px] max-w-[340px]'} flex-shrink-0 snap-center snap-always rounded-2xl p-3 backdrop-blur-xs transition-all duration-200 flex flex-col flex-1 min-h-[480px] max-h-[70vh] overflow-hidden shadow-sm {stageInfo.color} {dragOverStageId === stageInfo.id ? 'ring-2 ring-primary scale-[1.01] shadow-lg' : ''}"
+							ondragover={(e) => handleDragOver(e, stageInfo.id)}
+							ondragenter={(e) => handleDragOver(e, stageInfo.id)}
+							ondragleave={(e) => handleDragLeave(e, stageInfo.id)}
+							ondrop={(e) => handleDrop(e, stageInfo.id)}
+						>
+						
+						<!-- Column Header -->
+						<div class="flex items-center justify-between px-2 py-1.5 border-b border-base-300 mb-2.5 flex-shrink-0">
+							<div class="flex items-center gap-2">
+								<span class="text-base">{stageInfo.icon}</span>
+								<h3 class="font-display text-m font-extrabold text-base-content tracking-tight">{stageInfo.label}</h3>
+								<span class="badge badge-sm {stageInfo.badgeColor} font-bold shadow-xs">
+									{columnPieces.length}
+								</span>
+							</div>
+
+							{#if stageInfo.id === 'done' && failedPieces.length > 0}
+								<button 
+									onclick={() => showLossArchive = !showLossArchive}
+									class="btn btn-xs gap-1 {showLossArchive ? 'btn-error font-bold' : 'btn-ghost text-error hover:bg-error/10'}"
+									title="Toggle Loss Archive (Failed Pieces)"
 								>
-									<!-- Front Primary Batch Card (Layer 1) -->
-									<div class="ceramic-card-aura relative z-10">
+									<ShieldAlert class="w-3.5 h-3.5" />
+									<span class="text-[10px] font-bold">{failedPieces.length} {failedPieces.length === 1 ? 'loss' : 'losses'}</span>
+								</button>
+							{/if}
+						</div>
+
+						<!-- Stage Cards Scrollable Container -->
+						<div class="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
+							{#each getStageCardGroups(stageInfo.id) as group}
+								{@const groupKey = group.isBatch ? group.batchId! : group.primaryPiece.id}
+								{@const isCardHovered = dragOverCardGroupKey === groupKey}
+								{#if group.isBatch}
+									<!-- BATCH STACK CARD COMPONENT -->
+									<div class="ceramic-card-aura">
+										<div 
+											role="region"
+											aria-label="Batch Stack Card"
+											data-batch-key={`${group.batchId}::${stageInfo.id}::${group.glazeSignature}`}
+											data-card-group-key={groupKey}
+											class="stack w-full cursor-grab active:cursor-grabbing select-none group focus:outline-none"
+											ondragover={(e) => handleCardDragOver(e, group)}
+											ondragleave={(e) => handleCardDragLeave(e, group)}
+											ondrop={(e) => handleCardDrop(e, group)}
+										>
+										<!-- Top Main Card (z-[3] = rendered on top of stack) -->
 										<div 
 											role="listitem"
 											data-card-group-key={groupKey}
 											aria-grabbed={draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}`}
 											draggable={false}
 											onpointerdown={(e) => handlePointerDownBatch(e, group.batchId!, stageInfo.id, group.glazeSignature || '', group.batchTitle || 'Batch')}
-											class="ceramic-card relative z-10 snap-start p-3.5 rounded-xl border border-base-300 border-l-4 border-l-primary group space-y-3 cursor-grab active:cursor-grabbing select-none shadow-lg min-w-0 {group.primaryPiece.is_failed ? 'border-2 border-error bg-error/10 border-l-4 border-l-error shadow-error/10' : ''} {draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}` ? 'opacity-40 scale-95 border-dashed border-primary' : ''} {isCardHovered ? 'ring-2 ring-primary border-primary bg-primary/15' : ''}"
+											class="ceramic-card relative z-[3] snap-start p-3.5 rounded-xl border border-base-300 border-l-4 border-l-primary group space-y-3 cursor-grab active:cursor-grabbing select-none shadow-xl min-w-0 bg-base-100 {group.primaryPiece.is_failed ? 'border-2 border-error bg-error/10 border-l-4 border-l-error shadow-error/10' : ''} {draggedBatchKey === `${group.batchId}::${stageInfo.id}::${group.glazeSignature}` ? 'opacity-40 scale-95 border-dashed border-primary' : ''} {isCardHovered ? 'ring-2 ring-primary border-primary bg-primary/15' : ''}"
 										>
-										<!-- Merge Hover Highlight Banner -->
-										{#if isCardHovered}
-											<div class="bg-primary text-primary-content text-[10px] font-extrabold px-2.5 py-1 rounded-md text-center shadow-md animate-pulse flex items-center justify-center gap-1">
-												<Layers2 class="w-3.5 h-3.5" />
-												<span>Drop card to merge into batch!</span>
-											</div>
-										{/if}
-
-										<!-- Stacked Visual Indicator Badge & Drag Handle -->
-										<div class="flex items-center justify-between gap-1">
-											{#if group.primaryPiece.is_failed}
-												<div class="badge badge-error badge-sm gap-1 font-extrabold text-[10px]">
-													<AlertTriangle class="w-3.5 h-3.5 flex-shrink-0" />
-													<span>{group.pieces.length} PCS FAILED STACK</span>
-												</div>
-											{:else}
-												<div class="badge badge-primary badge-outline badge-sm gap-1 font-extrabold text-[10px]">
+											<!-- Stack Badge Header -->
+											<div class="flex items-center justify-between gap-1.5 text-xs pb-1.5 border-b border-base-200">
+												<div class="flex items-center gap-1.5 font-extrabold text-primary truncate">
 													<Layers2 class="w-3.5 h-3.5 flex-shrink-0" />
-													<span>{group.pieces.length} PCS STACK</span>
+													<span class="truncate">{group.batchTitle}</span>
 												</div>
-											{/if}
-											<span class="badge badge-accent badge-sm font-semibold text-[10px]">
-												{group.primaryPiece.target_glaze_cone}
-											</span>
-										</div>
+												<span class="badge badge-sm badge-primary font-black flex-shrink-0 shadow-xs">
+													{group.pieces.length} items
+												</span>
+											</div>
 
 										<!-- Thumbnail / Photo -->
 										{#if group.primaryPiece.initial_photo_url}
@@ -2843,14 +2932,18 @@
 											{/if}
 										</div>
 									</div>
-								</div>
 
-									<!-- Stack Layer 2 (Middle Stack Card) -->
-									<div class="ceramic-card bg-base-200 border border-base-300 h-full w-full pointer-events-none opacity-90 rounded-xl"></div>
+									<!-- Stack Layer 2 (z-[2] = peeking behind main card) -->
+									{#if group.pieces.length > 1}
+										<div class="ceramic-card relative z-[2] bg-base-200 border border-base-300 h-full w-full pointer-events-none rounded-xl shadow-md"></div>
+									{/if}
 
-									<!-- Stack Layer 3 (Back Stack Card) -->
-									<div class="ceramic-card bg-base-300 border border-base-300 h-full w-full pointer-events-none opacity-80 rounded-xl"></div>
+									<!-- Stack Layer 3 (z-[1] = peeking behind layer 2 card) -->
+									{#if group.pieces.length > 2}
+										<div class="ceramic-card relative z-[1] bg-base-300 border border-base-300 h-full w-full pointer-events-none rounded-xl shadow-sm"></div>
+									{/if}
 								</div>
+							</div>
 							{:else}
 								<!-- SINGLE PIECE CARD -->
 								{@const piece = group.primaryPiece}
@@ -3054,7 +3147,7 @@
 								<div class="h-44 border border-dashed rounded-xl flex flex-col items-center justify-center text-center p-4 bg-stone-100/60 dark:bg-stone-900/40 border-stone-300 dark:border-stone-800 space-y-1">
 									<FilterX class="w-7 h-7 text-stone-400 dark:text-stone-600 mb-1" />
 									<p class="text-xs font-bold text-stone-700 dark:text-stone-300">No matching pieces</p>
-									<p class="text-[10px] text-stone-500 dark:text-stone-400">Try adjusting your active filters.</p>
+									<p class="text-[10px] text-qtone-500 dark:text-stone-400">Try adjusting your active filters.</p>
 									<button type="button" onclick={clearAllFilters} class="mt-2 px-2.5 py-1 text-[10px] font-bold bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 rounded-lg transition cursor-pointer">Clear Filters</button>
 								</div>
 							{:else}
@@ -3074,6 +3167,268 @@
 			{/each}
 		</div>
 	</div>
+	{:else if viewMode === 'table'}
+		<!-- DAISYUI VISUAL TABLE COMPONENT FOR PIECES -->
+		<div class="w-full flex-1 min-h-0 flex flex-col bg-base-100 border border-base-300 rounded-2xl shadow-sm overflow-hidden mb-2">
+			<!-- Table Header & Controls Bar -->
+			<div class="p-3 bg-base-200/50 border-b border-base-300 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+				<div class="flex items-center gap-2">
+					<Table class="w-4 h-4 text-primary" />
+					<span class="font-extrabold text-sm text-base-content tracking-tight">Pieces Table Overview</span>
+					<span class="badge badge-sm badge-neutral font-bold">{tableDisplayedPieces.length} items</span>
+				</div>
+				<div class="text-xs text-base-content/60 font-medium">
+					Click headers to sort table rows
+				</div>
+			</div>
+
+			<!-- Responsive Scrollable Table Container -->
+			<div class="flex-1 min-h-0 overflow-auto">
+				<table class="table table-zebra table-pin-rows table-sm sm:table-md w-full">
+					<thead>
+						<tr class="bg-base-200/80 text-xs text-base-content/70 select-none">
+							<th class="cursor-pointer hover:text-primary transition-colors" onclick={() => toggleTableSort('title')}>
+								<div class="flex items-center gap-1.5">
+									<span>Piece & Batch</span>
+									{#if tableSortField === 'title'}
+										{#if tableSortAsc}<ArrowUp class="w-3 h-3 text-primary" />{:else}<ArrowDown class="w-3 h-3 text-primary" />{/if}
+									{:else}
+										<ArrowUpDown class="w-3 h-3 opacity-40" />
+									{/if}
+								</div>
+							</th>
+							<th class="cursor-pointer hover:text-primary transition-colors whitespace-nowrap min-w-[130px]" onclick={() => toggleTableSort('stage')}>
+								<div class="flex items-center gap-1.5">
+									<span>Stage</span>
+									{#if tableSortField === 'stage'}
+										{#if tableSortAsc}<ArrowUp class="w-3 h-3 text-primary" />{:else}<ArrowDown class="w-3 h-3 text-primary" />{/if}
+									{:else}
+										<ArrowUpDown class="w-3 h-3 opacity-40" />
+									{/if}
+								</div>
+							</th>
+							<th class="cursor-pointer hover:text-primary transition-colors" onclick={() => toggleTableSort('clay')}>
+								<div class="flex items-center gap-1.5">
+									<span>Form & Clay</span>
+									{#if tableSortField === 'clay'}
+										{#if tableSortAsc}<ArrowUp class="w-3 h-3 text-primary" />{:else}<ArrowDown class="w-3 h-3 text-primary" />{/if}
+									{:else}
+										<ArrowUpDown class="w-3 h-3 opacity-40" />
+									{/if}
+								</div>
+							</th>
+							<th class="whitespace-nowrap min-w-[130px] max-w-[180px]">Glaze & Cones</th>
+							<th class="cursor-pointer hover:text-primary transition-colors" onclick={() => toggleTableSort('weight')}>
+								<div class="flex items-center gap-1.5">
+									<span>Weight / Dim</span>
+									{#if tableSortField === 'weight'}
+										{#if tableSortAsc}<ArrowUp class="w-3 h-3 text-primary" />{:else}<ArrowDown class="w-3 h-3 text-primary" />{/if}
+									{:else}
+										<ArrowUpDown class="w-3 h-3 opacity-40" />
+									{/if}
+								</div>
+							</th>
+							<th class="cursor-pointer hover:text-primary transition-colors" onclick={() => toggleTableSort('due_date')}>
+								<div class="flex items-center gap-1.5">
+									<span>Due Date</span>
+									{#if tableSortField === 'due_date'}
+										{#if tableSortAsc}<ArrowUp class="w-3 h-3 text-primary" />{:else}<ArrowDown class="w-3 h-3 text-primary" />{/if}
+									{:else}
+										<ArrowUpDown class="w-3 h-3 opacity-40" />
+									{/if}
+								</div>
+							</th>
+							<th class="text-right whitespace-nowrap min-w-[140px]">Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each tableDisplayedPieces as piece (piece.id)}
+							{@const stageInfo = STAGES.find(s => s.id === piece.stage)}
+							<tr class="hover transition-colors">
+								<!-- Piece & Batch Info (Avatar + Details) -->
+								<td>
+									<div class="flex items-center gap-3">
+										<div class="avatar">
+											<div class="mask mask-squircle w-11 h-11 bg-base-200 border border-base-300 flex items-center justify-center overflow-hidden shadow-xs">
+												{#if piece.initial_photo_url}
+													<img src={piece.initial_photo_url} alt={piece.title} class="w-full h-full object-cover" />
+												{:else}
+													<span class="text-lg font-extrabold text-primary opacity-80">{piece.title.charAt(0).toUpperCase()}</span>
+												{/if}
+											</div>
+										</div>
+										<div class="min-w-0">
+											<div class="font-bold text-sm text-base-content truncate flex items-center gap-1.5">
+												<button
+													type="button"
+													onclick={() => selectedPiece = piece}
+													class="hover:text-primary hover:underline text-left cursor-pointer font-bold"
+												>
+													{piece.title}
+												</button>
+												{#if piece.is_failed}
+													<span class="badge badge-xs badge-error font-extrabold">Loss</span>
+												{/if}
+											</div>
+											<div class="text-xs opacity-60 flex items-center gap-1.5 mt-0.5 flex-wrap">
+												{#if piece.batch_id}
+													<span class="badge badge-xs badge-neutral font-semibold">
+														{piece.batch?.title || 'Batch'} #{piece.batch_sequence || ''}
+													</span>
+												{/if}
+												<span class="text-[10px] font-mono opacity-80">ID: {piece.id.slice(-6)}</span>
+											</div>
+										</div>
+									</div>
+								</td>
+
+								<!-- Stage Badge -->
+								<td class="whitespace-nowrap min-w-[130px]">
+									<span class="badge badge-sm font-bold gap-1.5 py-2 px-2.5 whitespace-nowrap {stageInfo?.badgeColor || 'badge-neutral'}">
+										<span>{stageInfo?.icon}</span>
+										<span>{stageInfo?.label}</span>
+									</span>
+								</td>
+
+								<!-- Form & Clay -->
+								<td>
+									<div class="space-y-0.5">
+										<div class="font-bold text-xs text-base-content">{piece.piece_type || 'Piece'}</div>
+										{#if piece.clay_body_name}
+											<div class="text-[11px] opacity-70 flex items-center gap-1">
+												<Package class="w-3 h-3 text-primary opacity-70" />
+												<span>{piece.clay_body_name}</span>
+											</div>
+										{/if}
+									</div>
+								</td>
+
+								<!-- Glazes & Cones -->
+								<td class="min-w-[130px] max-w-[180px]">
+									<div class="space-y-1">
+										{#if piece.glaze_layers && piece.glaze_layers.length > 0}
+											<div class="flex flex-wrap gap-1 max-w-full">
+												{#each piece.glaze_layers as gLayer}
+													<span class="badge badge-xs badge-info font-semibold max-w-full inline-flex items-center gap-0.5" title={`${gLayer.glaze_name} (${gLayer.coat_count}c)`}>
+														<span class="truncate max-w-[110px]">{gLayer.glaze_name}</span>
+														<span class="opacity-80 flex-shrink-0">({gLayer.coat_count}c)</span>
+													</span>
+												{/each}
+											</div>
+										{:else}
+											<span class="text-xs text-base-content/40 italic">Unglazed</span>
+										{/if}
+										<div class="flex items-center gap-1 text-[10px] font-mono">
+											{#if piece.target_glaze_cone}
+												<span class="badge badge-xs badge-warning badge-outline font-bold whitespace-nowrap">{piece.target_glaze_cone}</span>
+											{/if}
+										</div>
+									</div>
+								</td>
+
+								<!-- Weight & Dimensions -->
+								<td>
+									<div class="text-xs space-y-0.5">
+										{#if piece.weight_grams}
+											<div class="font-extrabold text-base-content">{piece.weight_grams} g</div>
+										{/if}
+										{#if piece.width_cm || piece.height_cm || piece.length_cm}
+											<div class="text-[11px] opacity-60 font-mono">
+												{[piece.length_cm, piece.width_cm, piece.height_cm].filter(Boolean).join('×')} cm
+											</div>
+										{:else if !piece.weight_grams}
+											<span class="text-base-content/40 text-xs italic">—</span>
+										{/if}
+									</div>
+								</td>
+
+								<!-- Due Date -->
+								<td>
+									{#if piece.due_date}
+										{@const d = new Date(piece.due_date)}
+										{@const isPast = d < new Date() && piece.stage !== 'done'}
+										<div class="flex items-center gap-1.5 text-xs font-semibold {isPast ? 'text-error font-bold' : 'text-base-content/80'}">
+											<Calendar class="w-3.5 h-3.5 opacity-70" />
+											<span>{formatDateShort(piece.due_date)}</span>
+											{#if isPast}
+												<span class="badge badge-xs badge-error font-bold">Late</span>
+											{/if}
+										</div>
+									{:else}
+										<span class="text-xs text-base-content/40 italic">—</span>
+									{/if}
+								</td>
+
+								<!-- Actions -->
+								<td class="text-right whitespace-nowrap min-w-[140px]">
+									<div class="flex items-center justify-end gap-1.5">
+										<!-- Stage Move Select Dropdown (Prevents layout shift/warping in table containers) -->
+										<select
+											value=""
+											onchange={(e) => {
+												const targetStage = e.currentTarget.value;
+												if (targetStage) {
+													movePieceToStage(piece.id, targetStage as CeramicStage);
+													e.currentTarget.value = "";
+												}
+											}}
+											class="select select-xs select-primary font-extrabold shadow-xs cursor-pointer text-xs w-26"
+											title="Move piece to specific stage lane"
+										>
+											<option value="" disabled selected class="font-bold text-base-content/50">Move to...</option>
+											{#each STAGES as s}
+												<option value={s.id} class="bg-base-100 text-base-content font-bold">
+													{s.icon} {s.label} {piece.stage === s.id ? ' (Current)' : ''}
+												</option>
+											{/each}
+										</select>
+
+										<button
+											type="button"
+											onclick={() => selectedPiece = piece}
+											class="btn btn-xs btn-ghost border border-base-300 font-semibold cursor-pointer"
+											title="View Details & Photos"
+										>
+											Details
+										</button>
+									</div>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+
+				{#if tableDisplayedPieces.length === 0}
+					<div class="p-8 text-center flex flex-col items-center justify-center space-y-2 text-base-content/60">
+						<FilterX class="w-8 h-8 opacity-40" />
+						<p class="text-sm font-bold text-base-content">No matching pieces found</p>
+						<p class="text-xs opacity-70">Try adjusting search or active filter settings.</p>
+						<button
+							type="button"
+							onclick={clearAllFilters}
+							class="btn btn-xs btn-outline btn-primary rounded-xl font-bold mt-2 cursor-pointer"
+						>
+							Reset Filters
+						</button>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Table Footer Summary -->
+			<div class="p-2.5 bg-base-200/40 border-t border-base-300 flex items-center justify-between text-xs text-base-content/60">
+				<div>
+					Showing <span class="font-bold text-base-content">{tableDisplayedPieces.length}</span> of <span class="font-bold text-base-content">{pieces.length}</span> total pieces
+				</div>
+				<div class="flex items-center gap-2">
+					<span class="badge badge-xs badge-primary font-bold">Active: {activePieces.length}</span>
+					<span class="badge badge-xs badge-success font-bold">Finished: {activePieces.filter(p => p.stage === 'done').length}</span>
+					{#if failedPieces.length > 0}
+						<span class="badge badge-xs badge-error font-bold">Losses: {failedPieces.length}</span>
+					{/if}
+				</div>
+			</div>
+		</div>
+	{/if}
 </div>
 
 <!-- MOBILE FILTER DRAWER MODAL -->
