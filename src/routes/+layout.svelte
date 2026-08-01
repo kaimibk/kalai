@@ -13,11 +13,11 @@
 	let { children } = $props();
 
 	const THEMES = [
-		'light', 'dark', 'cupcake', 'bumblebee', 'emerald', 'corporate', 
-		'synthwave', 'retro', 'cyberpunk', 'valentine', 'halloween', 'garden', 
+		'light', 'dark', 'retro', 'coffee', 'cupcake', 'bumblebee', 'emerald', 'corporate', 
+		'synthwave', 'cyberpunk', 'valentine', 'halloween', 'garden', 
 		'forest', 'aqua', 'lofi', 'pastel', 'fantasy', 'wireframe', 
 		'black', 'luxury', 'dracula', 'cmyk', 'autumn', 'business', 
-		'acid', 'lemonade', 'night', 'coffee', 'winter', 'dim', 
+		'acid', 'lemonade', 'night', 'winter', 'dim', 
 		'nord', 'sunset', 'caramellatte', 'abyss', 'silk'
 	];
 
