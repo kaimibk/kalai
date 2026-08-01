@@ -33,6 +33,8 @@
 	import NewPieceModal from '$lib/components/modals/NewPieceModal.svelte';
 	import PieceDetailModal from '$lib/components/modals/PieceDetailModal.svelte';
 
+	let { data }: { data?: { pieces?: CeramicPiece[] | null } } = $props();
+
 	// Initial State
 	let clayBodies = $state<ClayBody[]>([
 		{ id: 'cb-1', is_global: true, name: 'Speckled Buff 80', manufacturer: 'Laguna Clay', min_cone: 'Cone 5', max_cone: 'Cone 10', firing_range: 'Cone 5-10', shrinkage_pct: 12.0, raw_color: 'Buff', fired_color: 'Speckled Cream' },
@@ -224,6 +226,12 @@
 			glaze_layers: []
 		}
 	]);
+
+	$effect(() => {
+		if (data?.pieces && data.pieces.length > 0) {
+			pieces = data.pieces;
+		}
+	});
 
 	// View Mode & Navigation
 	let viewMode = $state<'lanes' | 'table'>('lanes');
