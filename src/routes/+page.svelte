@@ -103,6 +103,7 @@
 	// Normalized Manufacturers List
 	const MANUFACTURERS: Manufacturer[] = [
 		{ name: 'Amaco', category: 'glaze' },
+		{ name: 'Aardvark', category: 'both' },
 		{ name: 'Mayco', category: 'glaze' },
 		{ name: 'Coyote', category: 'glaze' },
 		{ name: 'Spectrum', category: 'glaze' },
@@ -4119,7 +4120,7 @@
 					</div>
 				{/if}
 			</div>
-			<div class="p-3 bg-base-200 rounded-xl border border-base-300 space-y-1.5 text-xs">
+			<div class="p-3.5 bg-base-200 my-4 rounded-xl border border-base-300 space-y-2 text-xs">
 				<div class="flex items-center justify-between">
 					<span class="font-bold text-base-content flex items-center gap-1.5">
 						<FileText class="w-4 h-4 text-primary" />
@@ -4169,7 +4170,7 @@
 			</div>
 
 			<!-- Glaze Tagging Section -->
-			<div class="space-y-4">
+			<div class="space-y-4 mt-6 pt-5 border-t border-base-300">
 				<div class="flex items-center justify-between">
 					<h4 class="font-display font-bold text-sm text-base-content flex items-center gap-2">
 						<Droplets class="w-4 h-4 text-success" />
@@ -4327,7 +4328,7 @@
 			</div>
 
 			<!-- Stage Timeline & Photo Log -->
-			<div class="space-y-3 pt-4 border-t border-base-300">
+			<div class="space-y-4 mt-6 pt-5 border-t border-base-300">
 				<h4 class="font-display font-bold text-sm text-base-content flex items-center gap-2">
 					<Camera class="w-4 h-4 text-primary" />
 					<span>Stage Snapshots & Photo History</span>
