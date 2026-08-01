@@ -344,10 +344,16 @@
 	let touchStartY = 0;
 	const TOUCH_MOVE_THRESHOLD = 18;
 	const TOUCH_HOLD_MS = 450;
-	const MOUSE_HOLD_MS = 50;
+	const MOUSE_HOLD_MS = 180;
 	let autoScrollAnimFrame: number | null = null;
 	let isSnappingStage = false;
 	let lastStageSnapTime = 0;
+
+	function isInteractiveTarget(target: EventTarget | null): boolean {
+		if (!target || !(target instanceof Element)) return false;
+		const actionEl = target.closest('button, input, select, a, textarea, [data-action-button]');
+		return actionEl !== null;
+	}
 
 	function resetDragState() {
 		if (touchLongPressTimer) {
@@ -378,7 +384,7 @@
 	}
 
 	function handlePointerDownPiece(e: PointerEvent, pieceId: string, label: string) {
-		if (e.button !== 0) return;
+		if (e.button !== 0 || isInteractiveTarget(e.target)) return;
 		resetDragState();
 		pendingPieceId = pieceId;
 		pendingBatchKey = null;
@@ -408,7 +414,7 @@
 	}
 
 	function handlePointerDownBatch(e: PointerEvent, batchId: string, stageId: CeramicStage, glazeSig: string, label: string) {
-		if (e.button !== 0) return;
+		if (e.button !== 0 || isInteractiveTarget(e.target)) return;
 		resetDragState();
 		pendingBatchKey = `${batchId}::${stageId}::${glazeSig}`;
 		pendingPieceId = null;
