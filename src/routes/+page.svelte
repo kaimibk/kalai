@@ -2601,7 +2601,7 @@
 					<div class="flex items-center justify-between px-2 py-1.5 border-b border-base-300 mb-2.5 flex-shrink-0">
 						<div class="flex items-center gap-2">
 							<span class="text-base">{stageInfo.icon}</span>
-							<h3 class="font-display text-xs font-extrabold text-base-content tracking-tight">{stageInfo.label}</h3>
+							<h3 class="font-display text-m font-extrabold text-base-content tracking-tight">{stageInfo.label}</h3>
 						</div>
 						<span class="badge {stageInfo.badgeColor} badge-sm font-bold">
 							{columnPieces.length}
@@ -3594,6 +3594,7 @@
 				<div class="space-y-0.5 min-w-0">
 					<span class="text-[10px] uppercase font-extrabold text-base-content/70 block tracking-wider">Target Due Date</span>
 					<CallyDatePicker
+						align="right"
 						value={formatDateInput(selectedPiece.due_date)}
 						placeholder="Set due date..."
 						onchange={(valStr) => {

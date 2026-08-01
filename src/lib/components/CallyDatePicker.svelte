@@ -6,10 +6,11 @@
 		value?: string; // YYYY-MM-DD format string
 		placeholder?: string;
 		class?: string;
+		align?: 'left' | 'right';
 		onchange?: (value: string) => void;
 	}
 
-	let { value = $bindable(''), placeholder = 'Select target date...', class: className = '', onchange }: Props = $props();
+	let { value = $bindable(''), placeholder = 'Select target date...', class: className = '', align = 'left', onchange }: Props = $props();
 
 	let isOpen = $state(false);
 	let isMounted = $state(false);
@@ -19,13 +20,25 @@
 		import('cally');
 	});
 
-	function handleCalendarChange(e: Event) {
-		const target = e.target as HTMLElement & { value?: string };
-		if (target && typeof target.value === 'string') {
-			value = target.value;
-			if (onchange) onchange(target.value);
-			isOpen = false;
-		}
+	function setupCally(node: HTMLElement) {
+		const handleEvent = () => {
+			const selectedVal = (node as any).value;
+			if (selectedVal && typeof selectedVal === 'string') {
+				value = selectedVal;
+				if (onchange) onchange(selectedVal);
+				isOpen = false;
+			}
+		};
+
+		node.addEventListener('change', handleEvent);
+		node.addEventListener('input', handleEvent);
+
+		return {
+			destroy() {
+				node.removeEventListener('change', handleEvent);
+				node.removeEventListener('input', handleEvent);
+			}
+		};
 	}
 
 	function handleClear(e: MouseEvent) {
@@ -91,11 +104,11 @@
 			class="fixed inset-0 z-40 bg-transparent cursor-default"
 		></button>
 
-		<div class="absolute left-0 top-full mt-2 z-50 p-2.5 bg-base-100 border border-base-300 rounded-2xl shadow-2xl space-y-2 text-base-content outline-none">
+		<div class="absolute {align === 'right' ? 'right-0 left-auto' : 'left-0 right-auto'} top-full mt-2 z-50 p-2.5 bg-base-100 border border-base-300 rounded-2xl shadow-2xl space-y-2 text-base-content outline-none max-w-[calc(100vw-2rem)]">
 			<calendar-date
+				use:setupCally
 				class="cally bg-base-100 text-base-content"
 				value={value || undefined}
-				onchange={handleCalendarChange}
 			>
 				<svg aria-label="Previous" class="fill-current size-4" {...{ slot: 'previous' }} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M15.75 19.5 8.25 12l7.5-7.5"></path></svg>
 				<svg aria-label="Next" class="fill-current size-4" {...{ slot: 'next' }} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m8.25 4.5 7.5 7.5-7.5 7.5"></path></svg>
