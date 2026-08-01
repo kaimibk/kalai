@@ -38,6 +38,15 @@ export interface KanbanStageInfo {
 	description?: string;
 }
 
+export interface KanbanDisplayGroup {
+	isBatch: boolean;
+	batchId?: string;
+	batchTitle?: string;
+	glazeSignature?: string;
+	pieces: CeramicPiece[];
+	primaryPiece: CeramicPiece;
+}
+
 export interface Profile {
 	id: string;
 	full_name: string | null;
