@@ -218,9 +218,13 @@
 	function addGlazeTagToPiece() {
 		if (!selectedPiece || !tagGlazeName.trim()) return;
 
+		const matchedGlaze = glazes.find(g => g.id === selectedGlazeOption || g.name.toLowerCase() === tagGlazeName.trim().toLowerCase());
+		const glazeId = matchedGlaze ? matchedGlaze.id : null;
+
 		const newLayer: PieceGlazeLayer = {
 			id: `gl-${Date.now()}`,
 			piece_id: selectedPiece.id,
+			glaze_id: glazeId,
 			glaze_name: tagGlazeName.trim(),
 			manufacturer: tagGlazeManufacturer,
 			layer_order: (selectedPiece.glaze_layers?.length || 0) + 1,

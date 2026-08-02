@@ -53,7 +53,8 @@
 		if (pieceToDuplicate && isOpen) {
 			duplicateTitle = `${pieceToDuplicate.title} (Copy)`;
 			duplicatePieceType = pieceToDuplicate.piece_type || 'Mug';
-			duplicateClayBodyId = pieceToDuplicate.clay_body_id || 'cb-1';
+			const defaultClayId = clayBodies.length > 0 ? clayBodies[0].id : '';
+			duplicateClayBodyId = (pieceToDuplicate.clay_body_id && pieceToDuplicate.clay_body_id !== 'cb-1') ? pieceToDuplicate.clay_body_id : defaultClayId;
 			duplicateStage = pieceToDuplicate.stage || 'backlog';
 			duplicateTargetBisqueCone = pieceToDuplicate.target_bisque_cone || 'Cone 06';
 			duplicateTargetGlazeCone = pieceToDuplicate.target_glaze_cone || 'Cone 6';

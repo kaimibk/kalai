@@ -35,8 +35,11 @@
 	import { 
 		updatePieceStageDb, 
 		insertPieceDb, 
+		updatePieceDb,
 		insertBatchDb,
 		insertGlazeLayerDb, 
+		deleteGlazeLayerDb,
+		insertStageLogDb,
 		markPieceFailedDb, 
 		insertClayBodyDb, 
 		insertGlazeRecipeDb 
@@ -972,6 +975,7 @@
 							title: p.title,
 							description: p.description,
 							piece_type: p.piece_type,
+							clay_body_id: p.clay_body_id,
 							clay_body_name: p.clay_body_name,
 							stage: p.stage,
 							batch_id: realBatchId,
@@ -985,7 +989,9 @@
 							formed_length_cm: p.formed_length_cm,
 							formed_width_cm: p.formed_width_cm,
 							formed_height_cm: p.formed_height_cm,
-							initial_photo_url: p.initial_photo_url
+							initial_photo_url: p.initial_photo_url,
+							due_date: p.due_date,
+							notes: p.notes
 						}).then(dbPiece => {
 							if (dbPiece?.id) {
 								pieces = pieces.map(item => item.id === p.id ? { ...item, id: dbPiece.id, batch_id: realBatchId, batch: dbBatch || item.batch } : item);
@@ -1032,6 +1038,7 @@
 					title: newPiece.title,
 					description: newPiece.description,
 					piece_type: newPiece.piece_type,
+					clay_body_id: newPiece.clay_body_id,
 					clay_body_name: newPiece.clay_body_name,
 					stage: newPiece.stage,
 					target_bisque_cone: newPiece.target_bisque_cone,
@@ -1043,7 +1050,9 @@
 					formed_length_cm: newPiece.formed_length_cm,
 					formed_width_cm: newPiece.formed_width_cm,
 					formed_height_cm: newPiece.formed_height_cm,
-					initial_photo_url: newPiece.initial_photo_url
+					initial_photo_url: newPiece.initial_photo_url,
+					due_date: newPiece.due_date,
+					notes: newPiece.notes
 				}).then(dbPiece => {
 					if (dbPiece?.id) {
 						pieces = pieces.map(item => item.id === tempId ? { ...item, id: dbPiece.id } : item);
@@ -1125,6 +1134,7 @@
 							title: p.title,
 							description: p.description,
 							piece_type: p.piece_type,
+							clay_body_id: p.clay_body_id,
 							clay_body_name: p.clay_body_name,
 							stage: p.stage,
 							batch_id: realBatchId,
@@ -1138,7 +1148,8 @@
 							formed_length_cm: p.formed_length_cm,
 							formed_width_cm: p.formed_width_cm,
 							formed_height_cm: p.formed_height_cm,
-							initial_photo_url: p.initial_photo_url
+							initial_photo_url: p.initial_photo_url,
+							due_date: p.due_date
 						}).then(dbPiece => {
 							if (dbPiece?.id) {
 								pieces = pieces.map(item => item.id === p.id ? { ...item, id: dbPiece.id, batch_id: realBatchId, batch: dbBatch || item.batch } : item);
@@ -1185,6 +1196,7 @@
 					title: newPiece.title,
 					description: newPiece.description,
 					piece_type: newPiece.piece_type,
+					clay_body_id: newPiece.clay_body_id,
 					clay_body_name: newPiece.clay_body_name,
 					stage: newPiece.stage,
 					target_bisque_cone: newPiece.target_bisque_cone,
@@ -1196,7 +1208,8 @@
 					formed_length_cm: newPiece.formed_length_cm,
 					formed_width_cm: newPiece.formed_width_cm,
 					formed_height_cm: newPiece.formed_height_cm,
-					initial_photo_url: newPiece.initial_photo_url
+					initial_photo_url: newPiece.initial_photo_url,
+					due_date: newPiece.due_date
 				}).then(dbPiece => {
 					if (dbPiece?.id) {
 						pieces = pieces.map(item => item.id === tempId ? { ...item, id: dbPiece.id } : item);
@@ -1239,11 +1252,13 @@
 
 	function restoreFailedPiece(pieceId: string) {
 		const now = new Date();
+		let restoredStage: CeramicStage = 'formed';
 		pieces = pieces.map(p => {
 			if (p.id === pieceId) {
+				restoredStage = (p.failure_stage as CeramicStage) || 'formed';
 				return {
 					...p,
-					stage: (p.failure_stage as CeramicStage) || 'formed',
+					stage: restoredStage,
 					is_failed: false,
 					failure_stage: null,
 					failure_reason: null,
@@ -1253,6 +1268,16 @@
 			}
 			return p;
 		});
+
+		if (data?.isConnected) {
+			updatePieceDb(pieceId, {
+				stage: restoredStage,
+				is_failed: false,
+				failure_stage: null,
+				failure_reason: null,
+				failed_at: null
+			}).catch(err => console.warn('Supabase restore failed piece error:', err));
+		}
 
 		showToast('Restored piece to active studio workflow!');
 	}
@@ -1266,14 +1291,14 @@
 		isSplitModalOpen = true;
 	}
 
-	function executeSplitBatch(data: { selectedPieceIds: string[]; action: string; newSubBatchTitle: string; failReason: string }) {
-		if (data.selectedPieceIds.length === 0) return;
-		const selectedSet = new Set(data.selectedPieceIds);
+	function executeSplitBatch(splitData: { selectedPieceIds: string[]; action: string; newSubBatchTitle: string; failReason: string }) {
+		if (splitData.selectedPieceIds.length === 0) return;
+		const selectedSet = new Set(splitData.selectedPieceIds);
 		const now = new Date();
 
-		if (data.action === 'new_batch') {
+		if (splitData.action === 'new_batch') {
 			const subBatchId = `b-sub-${Date.now()}`;
-			const subBatchTitle = data.newSubBatchTitle.trim() || 'Sub-Batch';
+			const subBatchTitle = splitData.newSubBatchTitle.trim() || 'Sub-Batch';
 			const subBatchObj: PieceBatch = {
 				id: subBatchId,
 				user_id: 'user-1',
@@ -1288,16 +1313,33 @@
 				}
 				return p;
 			});
-			showToast(`Split ${data.selectedPieceIds.length} piece(s) into sub-batch "${subBatchTitle}"!`);
-		} else if (data.action === 'detach') {
+
+			if (data?.isConnected) {
+				insertBatchDb(subBatchTitle).then(dbBatch => {
+					const realBatchId = dbBatch?.id || subBatchId;
+					splitData.selectedPieceIds.forEach(id => {
+						updatePieceDb(id, { batch_id: realBatchId }).catch(err => console.warn('Supabase split batch update error:', err));
+					});
+				}).catch(err => console.warn('Supabase split batch insert error:', err));
+			}
+
+			showToast(`Split ${splitData.selectedPieceIds.length} piece(s) into sub-batch "${subBatchTitle}"!`);
+		} else if (splitData.action === 'detach') {
 			pieces = pieces.map(p => {
 				if (selectedSet.has(p.id)) {
 					return { ...p, batch_id: null, batch: null, updated_at: now };
 				}
 				return p;
 			});
-			showToast(`Detached ${data.selectedPieceIds.length} piece(s) as standalone!`);
-		} else if (data.action === 'fail') {
+
+			if (data?.isConnected) {
+				splitData.selectedPieceIds.forEach(id => {
+					updatePieceDb(id, { batch_id: null }).catch(err => console.warn('Supabase detach piece error:', err));
+				});
+			}
+
+			showToast(`Detached ${splitData.selectedPieceIds.length} piece(s) as standalone!`);
+		} else if (splitData.action === 'fail') {
 			pieces = pieces.map(p => {
 				if (selectedSet.has(p.id)) {
 					return {
@@ -1305,21 +1347,33 @@
 						stage: 'done',
 						is_failed: true,
 						failure_stage: p.stage,
-						failure_reason: data.failReason.trim() || 'Batch split failure',
+						failure_reason: splitData.failReason.trim() || 'Batch split failure',
 						failed_at: now,
 						updated_at: now
 					};
 				}
 				return p;
 			});
-			showToast(`Flagged ${data.selectedPieceIds.length} piece(s) as failed from batch!`, 'warning');
+
+			if (data?.isConnected) {
+				splitData.selectedPieceIds.forEach(id => {
+					const targetP = pieces.find(p => p.id === id);
+					if (targetP) {
+						markPieceFailedDb(id, targetP.stage, splitData.failReason).catch(err => console.warn('Supabase split batch fail error:', err));
+					}
+				});
+			}
+
+			showToast(`Flagged ${splitData.selectedPieceIds.length} piece(s) as failed from batch!`, 'warning');
 		}
 	}
 
 	function handleUpdatePiece(updatedPiece: CeramicPiece, updateBatchGlaze?: { removeIndex?: number; addLayer?: PieceGlazeLayer }) {
+		const oldPiece = pieces.find(p => p.id === updatedPiece.id);
+
 		if (updateBatchGlaze && updatedPiece.batch_id) {
-			const curGlazeSig = updatedPiece.glaze_layers ? updatedPiece.glaze_layers.map(g => g.glaze_name).sort().join('|') : '';
 			const now = new Date();
+			const batchMembers = pieces.filter(p => p.batch_id === updatedPiece.batch_id && p.stage === updatedPiece.stage && p.is_failed === updatedPiece.is_failed);
 
 			pieces = pieces.map(p => {
 				if (p.batch_id === updatedPiece.batch_id && p.stage === updatedPiece.stage && p.is_failed === updatedPiece.is_failed) {
@@ -1334,8 +1388,66 @@
 				if (p.id === updatedPiece.id) return updatedPiece;
 				return p;
 			});
+
+			if (data?.isConnected) {
+				batchMembers.forEach(m => {
+					let layers = m.glaze_layers || [];
+					if (updateBatchGlaze.removeIndex !== undefined && layers[updateBatchGlaze.removeIndex]) {
+						const layerToDelete = layers[updateBatchGlaze.removeIndex];
+						deleteGlazeLayerDb(layerToDelete.id).catch(e => console.warn('Supabase glaze remove error:', e));
+					} else if (updateBatchGlaze.addLayer) {
+						insertGlazeLayerDb({ ...updateBatchGlaze.addLayer, piece_id: m.id }).then(dbLayer => {
+							if (dbLayer?.id) {
+								pieces = pieces.map(p => {
+									if (p.id === m.id && p.glaze_layers) {
+										const updatedL = p.glaze_layers.map(l => l.glaze_name === dbLayer.glaze_name && l.id.startsWith('gl-') ? { ...l, id: dbLayer.id } : l);
+										return { ...p, glaze_layers: updatedL };
+									}
+									return p;
+								});
+							}
+						}).catch(e => console.warn('Supabase glaze add error:', e));
+					}
+				});
+			}
 		} else {
 			pieces = pieces.map(p => p.id === updatedPiece.id ? updatedPiece : p);
+
+			if (data?.isConnected) {
+				updatePieceDb(updatedPiece.id, updatedPiece).catch(err => console.warn('Supabase update piece error:', err));
+
+				// Check for newly added glaze layer
+				if (updateBatchGlaze?.addLayer) {
+					const tempLayerId = updateBatchGlaze.addLayer.id;
+					insertGlazeLayerDb({ ...updateBatchGlaze.addLayer, piece_id: updatedPiece.id }).then(dbLayer => {
+						if (dbLayer?.id) {
+							pieces = pieces.map(p => {
+								if (p.id === updatedPiece.id && p.glaze_layers) {
+									const updatedL = p.glaze_layers.map(l => (l.id === tempLayerId || l.glaze_name === dbLayer.glaze_name) ? { ...l, id: dbLayer.id } : l);
+									return { ...p, glaze_layers: updatedL };
+								}
+								return p;
+							});
+						}
+					}).catch(e => console.warn('Supabase add glaze layer error:', e));
+				} else if (updateBatchGlaze?.removeIndex !== undefined && oldPiece?.glaze_layers?.[updateBatchGlaze.removeIndex]) {
+					deleteGlazeLayerDb(oldPiece.glaze_layers[updateBatchGlaze.removeIndex].id).catch(e => console.warn('Supabase remove glaze layer error:', e));
+				}
+
+				// Check for newly added stage log snapshot
+				if (updatedPiece.stage_logs && updatedPiece.stage_logs.length > (oldPiece?.stage_logs?.length || 0)) {
+					const newLog = updatedPiece.stage_logs[0];
+					if (newLog) {
+						insertStageLogDb({
+							piece_id: updatedPiece.id,
+							stage: newLog.stage,
+							notes: newLog.notes,
+							photo_url: newLog.photo_url,
+							weight_grams: newLog.weight_grams
+						}).catch(e => console.warn('Supabase stage log insert error:', e));
+					}
+				}
+			}
 		}
 	}
 </script>

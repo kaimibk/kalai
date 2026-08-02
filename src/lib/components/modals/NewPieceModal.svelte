@@ -42,7 +42,7 @@
 	let newTitle = $state('');
 	let newDescription = $state('');
 	let newPieceType = $state('Mug');
-	let newClayBodyId = $state('cb-1');
+	let newClayBodyId = $state('');
 	let newTargetBisqueCone = $state('Cone 06');
 	let newTargetGlazeCone = $state('Cone 6');
 	let newWeightAmount = $state<number | null>(null);
@@ -54,6 +54,12 @@
 	let newTargetLength = $state<number | null>(null);
 	let newTargetWidth = $state<number | null>(null);
 	let newTargetHeight = $state<number | null>(null);
+
+	$effect(() => {
+		if (isOpen && clayBodies.length > 0 && (!newClayBodyId || newClayBodyId === 'cb-1')) {
+			newClayBodyId = clayBodies[0].id;
+		}
+	});
 
 	let selectedClayForNewPiece = $derived(clayBodies.find(c => c.id === newClayBodyId));
 

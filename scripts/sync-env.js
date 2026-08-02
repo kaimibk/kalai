@@ -11,7 +11,7 @@ try {
 	const output = execSync('npx supabase status -o json', { encoding: 'utf-8' });
 	const jsonStr = output.substring(output.indexOf('{'));
 	const json = JSON.parse(jsonStr);
-	const key = json.ANON_KEY || json.PUBLISHABLE_KEY;
+	const key = json.PUBLISHABLE_KEY || json.ANON_KEY;
 
 	const envContent = `# Supabase API Settings (Local Development via Supabase CLI)
 VITE_SUPABASE_URL=${json.API_URL || 'http://127.0.0.1:54321'}
@@ -20,6 +20,13 @@ VITE_SUPABASE_ANON_KEY=${key}
 
 	writeFileSync(envPath, envContent);
 	console.log('✓ Successfully synced .env with local Supabase keys!');
+
+	try {
+		execSync(`docker exec -i $(docker ps -q --filter name=supabase_db_) psql -U postgres -d postgres -c "NOTIFY pgrst, 'reload schema';"`, { stdio: 'ignore' });
+		console.log('✓ Reloaded PostgREST schema cache!');
+	} catch (e) {
+		// Ignore if container not running
+	}
 } catch (e) {
 	console.error('Failed to sync .env from Supabase status:', e.message);
 }

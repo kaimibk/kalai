@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import type { CeramicPiece, ClayBody, GlazeRecipe, PieceGlazeLayer, PieceBatch } from '$lib/types/database';
+import type { CeramicPiece, ClayBody, GlazeRecipe, PieceGlazeLayer, PieceBatch, PieceStageLog } from '$lib/types/database';
 
-const DEFAULT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.Jg2jVKi3tggtnhSF641wM2bszA34fUcCDG7rimRTnsk';
+const DEFAULT_ANON_KEY = 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_ANON_KEY;
@@ -93,13 +93,61 @@ export async function updatePieceStageDb(pieceId: string, stage: string, notes?:
 	if (logErr) console.warn('Stage log creation warning:', logErr);
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function sanitizePiecePayload(piece: Partial<CeramicPiece>) {
+	const { batch, stage_logs, glaze_layers, id, ...clean } = piece;
+
+	if (clean.clay_body_id && typeof clean.clay_body_id === 'string' && !UUID_REGEX.test(clean.clay_body_id)) {
+		clean.clay_body_id = null;
+	}
+
+	if (clean.batch_id && typeof clean.batch_id === 'string' && !UUID_REGEX.test(clean.batch_id)) {
+		clean.batch_id = null;
+	}
+
+	if (clean.weight_grams !== undefined && clean.weight_grams !== null) {
+		const num = Number(clean.weight_grams);
+		clean.weight_grams = isNaN(num) ? null : Math.round(num);
+	}
+
+	return clean;
+}
+
 /**
  * Create a new piece in Supabase DB.
  */
 export async function insertPieceDb(piece: Partial<CeramicPiece>) {
+	const payload = sanitizePiecePayload(piece);
+
 	const { data, error } = await supabase
 		.from('ceramic_pieces')
-		.insert([piece])
+		.insert([payload])
+		.select('*, batch:batches(*), stage_logs:piece_stage_logs(*), glaze_layers:piece_glaze_layers(*)')
+		.single();
+
+	if (error) throw error;
+	return data as CeramicPiece;
+}
+
+/**
+ * Update any piece fields (dimensions, cones, notes, photos, stage, etc.) in Supabase DB.
+ */
+export async function updatePieceDb(pieceId: string, updates: Partial<CeramicPiece>) {
+	if (!pieceId || !UUID_REGEX.test(pieceId)) {
+		console.warn('Skipping updatePieceDb: pieceId is temporary client ID', pieceId);
+		return null;
+	}
+
+	const payload = {
+		...sanitizePiecePayload(updates),
+		updated_at: new Date().toISOString()
+	};
+
+	const { data, error } = await supabase
+		.from('ceramic_pieces')
+		.update(payload)
+		.eq('id', pieceId)
 		.select('*, batch:batches(*), stage_logs:piece_stage_logs(*), glaze_layers:piece_glaze_layers(*)')
 		.single();
 
@@ -125,14 +173,64 @@ export async function insertBatchDb(title: string, description?: string) {
  * Insert a new glaze layer application in Supabase DB.
  */
 export async function insertGlazeLayerDb(layer: Partial<PieceGlazeLayer>) {
+	if (!layer.piece_id || layer.piece_id.startsWith('p-')) {
+		console.warn('Skipping insertGlazeLayerDb: piece_id is temporary client ID', layer.piece_id);
+		return null;
+	}
+
+	const { id, location, ...cleanLayer } = layer as any;
+	const payload = typeof id === 'string' && !id.startsWith('gl-') ? { id, ...cleanLayer } : cleanLayer;
+
 	const { data, error } = await supabase
 		.from('piece_glaze_layers')
-		.insert([layer])
+		.insert([payload])
 		.select('*')
 		.single();
 
 	if (error) throw error;
 	return data as PieceGlazeLayer;
+}
+
+/**
+ * Delete a glaze layer application from Supabase DB.
+ */
+export async function deleteGlazeLayerDb(layerId: string) {
+	if (!layerId || layerId.startsWith('gl-')) {
+		return;
+	}
+
+	const { error } = await supabase
+		.from('piece_glaze_layers')
+		.delete()
+		.eq('id', layerId);
+
+	if (error) throw error;
+}
+
+/**
+ * Insert a stage log snapshot in Supabase DB.
+ */
+export async function insertStageLogDb(log: Partial<PieceStageLog>) {
+	if (!log.piece_id || log.piece_id.startsWith('p-')) {
+		return null;
+	}
+
+	const { id, ...cleanLog } = log;
+	const payload = typeof id === 'string' && !id.startsWith('log-') ? { id, ...cleanLog } : cleanLog;
+
+	if (payload.weight_grams !== undefined && payload.weight_grams !== null) {
+		const num = Number(payload.weight_grams);
+		payload.weight_grams = isNaN(num) ? null : Math.round(num);
+	}
+
+	const { data, error } = await supabase
+		.from('piece_stage_logs')
+		.insert([payload])
+		.select('*')
+		.single();
+
+	if (error) throw error;
+	return data as PieceStageLog;
 }
 
 /**
