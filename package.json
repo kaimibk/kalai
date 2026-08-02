@@ -7,7 +7,12 @@
 		"dev": "vite dev --host 0.0.0.0 --port 3000",
 		"build": "vite build",
 		"preview": "vite preview",
-		"check": "svelte-check --tsconfig ./tsconfig.json"
+		"check": "svelte-check --tsconfig ./tsconfig.json",
+		"db:start": "SUPABASE_SERVICES_HOSTNAME=host.docker.internal supabase start --ignore-health-check && npm run db:env",
+		"db:stop": "supabase stop",
+		"db:reset": "SUPABASE_SERVICES_HOSTNAME=host.docker.internal supabase db reset && npm run db:env",
+		"db:status": "supabase status",
+		"db:env": "node scripts/sync-env.js"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-static": "^3.0.10",
@@ -15,6 +20,7 @@
 		"@sveltejs/vite-plugin-svelte": "^5.0.0",
 		"@tailwindcss/vite": "^4.0.0",
 		"daisyui": "^5.7.9",
+		"supabase": "^2.111.0",
 		"svelte": "^5.16.0",
 		"svelte-check": "^4.1.0",
 		"tailwindcss": "^4.0.0",

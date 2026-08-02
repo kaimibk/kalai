@@ -32,8 +32,17 @@
 	import JobSplitModal from '$lib/components/modals/JobSplitModal.svelte';
 	import NewPieceModal from '$lib/components/modals/NewPieceModal.svelte';
 	import PieceDetailModal from '$lib/components/modals/PieceDetailModal.svelte';
+	import { 
+		updatePieceStageDb, 
+		insertPieceDb, 
+		insertBatchDb,
+		insertGlazeLayerDb, 
+		markPieceFailedDb, 
+		insertClayBodyDb, 
+		insertGlazeRecipeDb 
+	} from '$lib/supabaseClient';
 
-	let { data }: { data?: { pieces?: CeramicPiece[] | null } } = $props();
+	let { data }: { data?: { pieces?: CeramicPiece[] | null; clayBodies?: ClayBody[] | null; glazes?: GlazeRecipe[] | null; isConnected?: boolean } } = $props();
 
 	// Initial State
 	let clayBodies = $state<ClayBody[]>([
@@ -230,6 +239,12 @@
 	$effect(() => {
 		if (data?.pieces && data.pieces.length > 0) {
 			pieces = data.pieces;
+		}
+		if (data?.clayBodies && data.clayBodies.length > 0) {
+			clayBodies = data.clayBodies;
+		}
+		if (data?.glazes && data.glazes.length > 0) {
+			glazes = data.glazes;
 		}
 	});
 
@@ -610,6 +625,13 @@
 				}
 				return p;
 			});
+
+			if (data?.isConnected) {
+				const [bId, srcStage, glazeSig] = draggedBatchKey.split('::');
+				pieces.filter(p => p.batch_id === bId && p.stage === targetStage && !p.is_failed).forEach(p => {
+					updatePieceStageDb(p.id, targetStage).catch(err => console.warn('Supabase batch stage sync error:', err));
+				});
+			}
 			showToast(`Moved batch stack to ${stageName}`);
 		} else if (draggedPieceId) {
 			const piece = pieces.find(p => p.id === draggedPieceId);
@@ -626,6 +648,11 @@
 					}
 					return p;
 				});
+
+				if (data?.isConnected) {
+					updatePieceStageDb(draggedPieceId, targetStage).catch(err => console.warn('Supabase piece stage sync error:', err));
+				}
+
 				showToast(`Moved piece "${piece.title}" to ${stageName}`);
 			}
 		}
@@ -840,6 +867,13 @@
 			}
 			return p;
 		});
+
+		if (data?.isConnected) {
+			updatePieceStageDb(pieceId, targetStage).catch(err => {
+				console.warn('Supabase stage sync warning:', err);
+			});
+		}
+
 		showToast(`Moved piece to ${stageName}`);
 	}
 
@@ -871,25 +905,25 @@
 		return idx >= 0 && idx < stages.length - 1 ? stages[idx + 1] : 'done';
 	}
 
-	function handleCreatePiece(data: any) {
+	function handleCreatePiece(formData: any) {
 		const now = new Date();
-		const clay = clayBodies.find(c => c.id === data.clayBodyId);
+		const clay = clayBodies.find(c => c.id === formData.clayBodyId);
 		const clayName = clay ? clay.name : 'Studio Clay';
-		const weightGrams = data.weightAmount ? toGrams(data.weightAmount, data.weightUnit) : null;
+		const weightGrams = formData.weightAmount ? toGrams(formData.weightAmount, formData.weightUnit) : null;
 		const shrinkPct = clay ? clay.shrinkage_pct : 12.0;
 
-		const tLen = data.targetLength && data.targetLength > 0 ? data.targetLength : null;
-		const tWid = data.targetWidth && data.targetWidth > 0 ? data.targetWidth : null;
-		const tHgt = data.targetHeight && data.targetHeight > 0 ? data.targetHeight : null;
+		const tLen = formData.targetLength && formData.targetLength > 0 ? formData.targetLength : null;
+		const tWid = formData.targetWidth && formData.targetWidth > 0 ? formData.targetWidth : null;
+		const tHgt = formData.targetHeight && formData.targetHeight > 0 ? formData.targetHeight : null;
 
 		const fLen = calculateFormedDimension(tLen, shrinkPct);
 		const fWid = calculateFormedDimension(tWid, shrinkPct);
 		const fHgt = calculateFormedDimension(tHgt, shrinkPct);
-		const parsedDueDate = parseDateInput(data.dueDate);
+		const parsedDueDate = parseDateInput(formData.dueDate);
 
-		if (data.quantity > 1) {
+		if (formData.quantity > 1) {
 			const batchId = `b-${Date.now()}`;
-			const bTitle = data.batchTitle.trim() || `${data.title} (${data.quantity} Batch)`;
+			const bTitle = formData.batchTitle.trim() || `${formData.title} (${formData.quantity} Batch)`;
 			const batchObj: PieceBatch = {
 				id: batchId,
 				user_id: 'user-1',
@@ -898,21 +932,21 @@
 				updated_at: now
 			};
 
-			const newPieces: CeramicPiece[] = Array.from({ length: data.quantity }).map((_, i) => ({
+			const newPieces: CeramicPiece[] = Array.from({ length: formData.quantity }).map((_, i) => ({
 				id: `p-${Date.now()}-${i + 1}`,
 				user_id: 'user-1',
-				title: `${data.title} #${i + 1}`,
-				description: data.description || null,
-				piece_type: data.pieceType,
-				clay_body_id: data.clayBodyId,
+				title: `${formData.title} #${i + 1}`,
+				description: formData.description || null,
+				piece_type: formData.pieceType,
+				clay_body_id: formData.clayBodyId,
 				clay_body_name: clayName,
 				stage: 'backlog',
 				batch_id: batchId,
 				batch_sequence: i + 1,
 				batch: batchObj,
 				is_failed: false,
-				target_bisque_cone: data.targetBisqueCone,
-				target_glaze_cone: data.targetGlazeCone,
+				target_bisque_cone: formData.targetBisqueCone,
+				target_glaze_cone: formData.targetGlazeCone,
 				weight_grams: weightGrams,
 				target_length_cm: tLen,
 				target_width_cm: tWid,
@@ -920,7 +954,7 @@
 				formed_length_cm: fLen,
 				formed_width_cm: fWid,
 				formed_height_cm: fHgt,
-				initial_photo_url: data.initialPhotoUrl || null,
+				initial_photo_url: formData.initialPhotoUrl || null,
 				due_date: parsedDueDate,
 				created_at: now,
 				updated_at: now,
@@ -929,20 +963,53 @@
 			}));
 
 			pieces = [...newPieces, ...pieces];
-			showToast(`Created batch "${bTitle}" with ${data.quantity} pieces!`);
+
+			if (data?.isConnected) {
+				insertBatchDb(bTitle).then(dbBatch => {
+					const realBatchId = dbBatch?.id || batchId;
+					newPieces.forEach(p => {
+						insertPieceDb({
+							title: p.title,
+							description: p.description,
+							piece_type: p.piece_type,
+							clay_body_name: p.clay_body_name,
+							stage: p.stage,
+							batch_id: realBatchId,
+							batch_sequence: p.batch_sequence,
+							target_bisque_cone: p.target_bisque_cone,
+							target_glaze_cone: p.target_glaze_cone,
+							weight_grams: p.weight_grams,
+							target_length_cm: p.target_length_cm,
+							target_width_cm: p.target_width_cm,
+							target_height_cm: p.target_height_cm,
+							formed_length_cm: p.formed_length_cm,
+							formed_width_cm: p.formed_width_cm,
+							formed_height_cm: p.formed_height_cm,
+							initial_photo_url: p.initial_photo_url
+						}).then(dbPiece => {
+							if (dbPiece?.id) {
+								pieces = pieces.map(item => item.id === p.id ? { ...item, id: dbPiece.id, batch_id: realBatchId, batch: dbBatch || item.batch } : item);
+							}
+						}).catch(e => console.warn('Supabase batch insert piece error:', e));
+					});
+				}).catch(e => console.warn('Supabase insert batch error:', e));
+			}
+
+			showToast(`Created batch "${bTitle}" with ${formData.quantity} pieces!`);
 		} else {
+			const tempId = `p-${Date.now()}`;
 			const newPiece: CeramicPiece = {
-				id: `p-${Date.now()}`,
+				id: tempId,
 				user_id: 'user-1',
-				title: data.title,
-				description: data.description || null,
-				piece_type: data.pieceType,
-				clay_body_id: data.clayBodyId,
+				title: formData.title,
+				description: formData.description || null,
+				piece_type: formData.pieceType,
+				clay_body_id: formData.clayBodyId,
 				clay_body_name: clayName,
 				stage: 'backlog',
 				is_failed: false,
-				target_bisque_cone: data.targetBisqueCone,
-				target_glaze_cone: data.targetGlazeCone,
+				target_bisque_cone: formData.targetBisqueCone,
+				target_glaze_cone: formData.targetGlazeCone,
 				weight_grams: weightGrams,
 				target_length_cm: tLen,
 				target_width_cm: tWid,
@@ -950,7 +1017,7 @@
 				formed_length_cm: fLen,
 				formed_width_cm: fWid,
 				formed_height_cm: fHgt,
-				initial_photo_url: data.initialPhotoUrl || null,
+				initial_photo_url: formData.initialPhotoUrl || null,
 				due_date: parsedDueDate,
 				created_at: now,
 				updated_at: now,
@@ -959,32 +1026,57 @@
 			};
 
 			pieces = [newPiece, ...pieces];
+
+			if (data?.isConnected) {
+				insertPieceDb({
+					title: newPiece.title,
+					description: newPiece.description,
+					piece_type: newPiece.piece_type,
+					clay_body_name: newPiece.clay_body_name,
+					stage: newPiece.stage,
+					target_bisque_cone: newPiece.target_bisque_cone,
+					target_glaze_cone: newPiece.target_glaze_cone,
+					weight_grams: newPiece.weight_grams,
+					target_length_cm: newPiece.target_length_cm,
+					target_width_cm: newPiece.target_width_cm,
+					target_height_cm: newPiece.target_height_cm,
+					formed_length_cm: newPiece.formed_length_cm,
+					formed_width_cm: newPiece.formed_width_cm,
+					formed_height_cm: newPiece.formed_height_cm,
+					initial_photo_url: newPiece.initial_photo_url
+				}).then(dbPiece => {
+					if (dbPiece?.id) {
+						pieces = pieces.map(item => item.id === tempId ? { ...item, id: dbPiece.id } : item);
+					}
+				}).catch(e => console.warn('Supabase insert piece error:', e));
+			}
+
 			showToast(`Created piece "${newPiece.title}"!`);
 		}
 	}
 
-	function handleDuplicatePiece(data: any) {
+	function handleDuplicatePiece(formData: any) {
 		if (!pieceToDuplicate) return;
 		const target = pieceToDuplicate;
 		const now = new Date();
-		const clay = clayBodies.find(c => c.id === data.clayBodyId);
+		const clay = clayBodies.find(c => c.id === formData.clayBodyId);
 		const clayName = clay ? clay.name : 'Studio Clay';
-		const weightGrams = data.weightAmount ? toGrams(data.weightAmount, data.weightUnit) : null;
+		const weightGrams = formData.weightAmount ? toGrams(formData.weightAmount, formData.weightUnit) : null;
 		const shrinkPct = clay ? clay.shrinkage_pct : 12.0;
 
-		const tLen = data.targetLength && data.targetLength > 0 ? data.targetLength : null;
-		const tWid = data.targetWidth && data.targetWidth > 0 ? data.targetWidth : null;
-		const tHgt = data.targetHeight && data.targetHeight > 0 ? data.targetHeight : null;
+		const tLen = formData.targetLength && formData.targetLength > 0 ? formData.targetLength : null;
+		const tWid = formData.targetWidth && formData.targetWidth > 0 ? formData.targetWidth : null;
+		const tHgt = formData.targetHeight && formData.targetHeight > 0 ? formData.targetHeight : null;
 
 		const fLen = calculateFormedDimension(tLen, shrinkPct);
 		const fWid = calculateFormedDimension(tWid, shrinkPct);
 		const fHgt = calculateFormedDimension(tHgt, shrinkPct);
 
-		const copyGlazeLayers = data.copyGlazes && target.glaze_layers ? target.glaze_layers.map(g => ({ ...g, id: `gl-${Date.now()}-${Math.random()}` })) : [];
+		const copyGlazeLayers = formData.copyGlazes && target.glaze_layers ? target.glaze_layers.map(g => ({ ...g, id: `gl-${Date.now()}-${Math.random()}` })) : [];
 
-		if (data.quantity > 1) {
+		if (formData.quantity > 1) {
 			const batchId = `b-${Date.now()}`;
-			const bTitle = `${data.title} (${data.quantity} Batch)`;
+			const bTitle = `${formData.title} (${formData.quantity} Batch)`;
 			const batchObj: PieceBatch = {
 				id: batchId,
 				user_id: 'user-1',
@@ -993,21 +1085,21 @@
 				updated_at: now
 			};
 
-			const newPieces: CeramicPiece[] = Array.from({ length: data.quantity }).map((_, i) => ({
+			const newPieces: CeramicPiece[] = Array.from({ length: formData.quantity }).map((_, i) => ({
 				id: `p-dup-${Date.now()}-${i + 1}`,
 				user_id: 'user-1',
-				title: `${data.title} #${i + 1}`,
-				description: data.description || target.description,
-				piece_type: data.pieceType,
-				clay_body_id: data.clayBodyId,
+				title: `${formData.title} #${i + 1}`,
+				description: formData.description || target.description,
+				piece_type: formData.pieceType,
+				clay_body_id: formData.clayBodyId,
 				clay_body_name: clayName,
-				stage: data.stage,
+				stage: formData.stage,
 				batch_id: batchId,
 				batch_sequence: i + 1,
 				batch: batchObj,
 				is_failed: false,
-				target_bisque_cone: data.targetBisqueCone,
-				target_glaze_cone: data.targetGlazeCone,
+				target_bisque_cone: formData.targetBisqueCone,
+				target_glaze_cone: formData.targetGlazeCone,
 				weight_grams: weightGrams,
 				target_length_cm: tLen,
 				target_width_cm: tWid,
@@ -1024,20 +1116,53 @@
 			}));
 
 			pieces = [...newPieces, ...pieces];
-			showToast(`Duplicated into new batch "${bTitle}" with ${data.quantity} pieces!`);
+
+			if (data?.isConnected) {
+				insertBatchDb(bTitle).then(dbBatch => {
+					const realBatchId = dbBatch?.id || batchId;
+					newPieces.forEach(p => {
+						insertPieceDb({
+							title: p.title,
+							description: p.description,
+							piece_type: p.piece_type,
+							clay_body_name: p.clay_body_name,
+							stage: p.stage,
+							batch_id: realBatchId,
+							batch_sequence: p.batch_sequence,
+							target_bisque_cone: p.target_bisque_cone,
+							target_glaze_cone: p.target_glaze_cone,
+							weight_grams: p.weight_grams,
+							target_length_cm: p.target_length_cm,
+							target_width_cm: p.target_width_cm,
+							target_height_cm: p.target_height_cm,
+							formed_length_cm: p.formed_length_cm,
+							formed_width_cm: p.formed_width_cm,
+							formed_height_cm: p.formed_height_cm,
+							initial_photo_url: p.initial_photo_url
+						}).then(dbPiece => {
+							if (dbPiece?.id) {
+								pieces = pieces.map(item => item.id === p.id ? { ...item, id: dbPiece.id, batch_id: realBatchId, batch: dbBatch || item.batch } : item);
+							}
+						}).catch(e => console.warn('Supabase batch insert piece error:', e));
+					});
+				}).catch(e => console.warn('Supabase insert batch error:', e));
+			}
+
+			showToast(`Duplicated into new batch "${bTitle}" with ${formData.quantity} pieces!`);
 		} else {
+			const tempId = `p-dup-${Date.now()}`;
 			const newPiece: CeramicPiece = {
-				id: `p-dup-${Date.now()}`,
+				id: tempId,
 				user_id: 'user-1',
-				title: data.title,
-				description: data.description || target.description,
-				piece_type: data.pieceType,
-				clay_body_id: data.clayBodyId,
+				title: formData.title,
+				description: formData.description || target.description,
+				piece_type: formData.pieceType,
+				clay_body_id: formData.clayBodyId,
 				clay_body_name: clayName,
-				stage: data.stage,
+				stage: formData.stage,
 				is_failed: false,
-				target_bisque_cone: data.targetBisqueCone,
-				target_glaze_cone: data.targetGlazeCone,
+				target_bisque_cone: formData.targetBisqueCone,
+				target_glaze_cone: formData.targetGlazeCone,
 				weight_grams: weightGrams,
 				target_length_cm: tLen,
 				target_width_cm: tWid,
@@ -1054,15 +1179,41 @@
 			};
 
 			pieces = [newPiece, ...pieces];
+
+			if (data?.isConnected) {
+				insertPieceDb({
+					title: newPiece.title,
+					description: newPiece.description,
+					piece_type: newPiece.piece_type,
+					clay_body_name: newPiece.clay_body_name,
+					stage: newPiece.stage,
+					target_bisque_cone: newPiece.target_bisque_cone,
+					target_glaze_cone: newPiece.target_glaze_cone,
+					weight_grams: newPiece.weight_grams,
+					target_length_cm: newPiece.target_length_cm,
+					target_width_cm: newPiece.target_width_cm,
+					target_height_cm: newPiece.target_height_cm,
+					formed_length_cm: newPiece.formed_length_cm,
+					formed_width_cm: newPiece.formed_width_cm,
+					formed_height_cm: newPiece.formed_height_cm,
+					initial_photo_url: newPiece.initial_photo_url
+				}).then(dbPiece => {
+					if (dbPiece?.id) {
+						pieces = pieces.map(item => item.id === tempId ? { ...item, id: dbPiece.id } : item);
+					}
+				}).catch(e => console.warn('Supabase insert piece error:', e));
+			}
+
 			showToast(`Created duplicate piece "${newPiece.title}"!`);
 		}
 	}
 
 	function flagPieceAsFailed(reason: string) {
 		if (!pieceToFail) return;
+		const targetPiece = pieceToFail;
 		const now = new Date();
 		pieces = pieces.map(p => {
-			if (p.id === pieceToFail!.id) {
+			if (p.id === targetPiece.id) {
 				return {
 					...p,
 					stage: 'done',
@@ -1076,7 +1227,13 @@
 			return p;
 		});
 
-		showToast(`Flagged "${pieceToFail.title}" as failed loss`, 'warning');
+		if (data?.isConnected) {
+			markPieceFailedDb(targetPiece.id, targetPiece.stage, reason).catch(e => {
+				console.warn('Supabase failure flag warning:', e);
+			});
+		}
+
+		showToast(`Flagged "${targetPiece.title}" as failed loss`, 'warning');
 		pieceToFail = null;
 	}
 
@@ -1290,6 +1447,19 @@
 	{clayBodies}
 	onAddClay={(newClay) => {
 		clayBodies = [...clayBodies, newClay];
+		if (data?.isConnected) {
+			insertClayBodyDb({
+				name: newClay.name,
+				manufacturer: newClay.manufacturer,
+				min_cone: newClay.min_cone,
+				max_cone: newClay.max_cone,
+				firing_range: newClay.firing_range,
+				shrinkage_pct: newClay.shrinkage_pct,
+				raw_color: newClay.raw_color,
+				fired_color: newClay.fired_color,
+				notes: newClay.notes
+			}).catch(e => console.warn('Supabase clay insert warning:', e));
+		}
 		showToast(`Added "${newClay.name}" to clay bodies library!`);
 	}}
 />
@@ -1299,6 +1469,19 @@
 	{glazes}
 	onAddGlaze={(newGlaze) => {
 		glazes = [...glazes, newGlaze];
+		if (data?.isConnected) {
+			insertGlazeRecipeDb({
+				name: newGlaze.name,
+				manufacturer: newGlaze.manufacturer,
+				default_style: newGlaze.default_style,
+				min_cone: newGlaze.min_cone,
+				max_cone: newGlaze.max_cone,
+				target_cone: newGlaze.target_cone,
+				atmosphere: newGlaze.atmosphere,
+				batch_liters: newGlaze.batch_liters,
+				notes: newGlaze.notes
+			}).catch(e => console.warn('Supabase glaze insert warning:', e));
+		}
 		showToast(`Added "${newGlaze.name}" to glaze library!`);
 	}}
 />

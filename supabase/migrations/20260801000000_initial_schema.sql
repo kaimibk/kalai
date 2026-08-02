@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 
 -- 2. Pyrometric Cones Lookup Table (Orton / Skutt Chart)
 CREATE TABLE IF NOT EXISTS public.pyrometric_cones (
-  name TEXT PRIMARY KEY, -- e.g. 'Cone 022' through 'Cone 10'
+  name TEXT PRIMARY KEY,
   display_order INT UNIQUE NOT NULL,
   temp_f INT NOT NULL,
   temp_c INT NOT NULL,
@@ -142,10 +142,10 @@ VALUES
   ('00000000-0000-0000-0000-000000000005', TRUE, 'Ochre Heavy Stoneware', 'Laguna Clay', 'Cone 6', 'Cone 10', 'Cone 6-10', 13.0, 'Dark Brown', 'Toast Ochre')
 ON CONFLICT (id) DO NOTHING;
 
--- 7. Batches Table (For multi-piece duplicate creation and split job tracking)
+-- 7. Batches Table
 CREATE TABLE IF NOT EXISTS public.batches (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT,
   parent_batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
@@ -153,10 +153,10 @@ CREATE TABLE IF NOT EXISTS public.batches (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 8. Ceramic Pieces (Streamlined 6 Kanban Stages)
+-- 8. Ceramic Pieces
 CREATE TABLE IF NOT EXISTS public.ceramic_pieces (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT,
   piece_type TEXT REFERENCES public.piece_types(name) DEFAULT 'Mug',
@@ -170,7 +170,7 @@ CREATE TABLE IF NOT EXISTS public.ceramic_pieces (
 
   is_failed BOOLEAN DEFAULT FALSE,
   failure_stage TEXT REFERENCES public.kanban_stages(id),
-  failure_reason TEXT, -- Free-form failure reason (e.g. S-crack in base, handle popped off, glaze ran)
+  failure_reason TEXT,
   failed_at TIMESTAMPTZ,
 
   target_bisque_cone TEXT REFERENCES public.pyrometric_cones(name) DEFAULT 'Cone 06',
@@ -197,11 +197,11 @@ CREATE TABLE IF NOT EXISTS public.ceramic_pieces (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 8. Stage Snapshots & Photo History
+-- 9. Stage Snapshots
 CREATE TABLE IF NOT EXISTS public.piece_stage_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   piece_id UUID NOT NULL REFERENCES public.ceramic_pieces(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   stage TEXT REFERENCES public.kanban_stages(id) NOT NULL,
   photo_url TEXT,
   notes TEXT,
@@ -209,7 +209,7 @@ CREATE TABLE IF NOT EXISTS public.piece_stage_logs (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 9. Glaze Recipes & Predefined Library
+-- 10. Glaze Recipes
 CREATE TABLE IF NOT EXISTS public.glaze_recipes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -236,7 +236,7 @@ VALUES
   ('00000000-0000-0000-0000-000000000014', TRUE, 'Floating Blue Studio Dip', 'Custom Studio', 'dip', 'Cone 5', 'Cone 6', 'Cone 6', 'Oxidation', 'Variegated cobalt float bucket glaze.')
 ON CONFLICT (id) DO NOTHING;
 
--- 10. Glaze Layers Applied on Ceramic Pieces
+-- 11. Glaze Layers
 CREATE TABLE IF NOT EXISTS public.piece_glaze_layers (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   piece_id UUID NOT NULL REFERENCES public.ceramic_pieces(id) ON DELETE CASCADE,
@@ -250,7 +250,7 @@ CREATE TABLE IF NOT EXISTS public.piece_glaze_layers (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ROW LEVEL SECURITY (RLS) POLICIES
+-- RLS POLICIES
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pyrometric_cones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.manufacturers ENABLE ROW LEVEL SECURITY;
@@ -263,38 +263,23 @@ ALTER TABLE public.piece_stage_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.glaze_recipes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.piece_glaze_layers ENABLE ROW LEVEL SECURITY;
 
--- Public Read for Lookup Tables
 CREATE POLICY "Public read pyrometric cones" ON public.pyrometric_cones FOR SELECT USING (TRUE);
 CREATE POLICY "Public read manufacturers" ON public.manufacturers FOR SELECT USING (TRUE);
 CREATE POLICY "Public read piece types" ON public.piece_types FOR SELECT USING (TRUE);
 CREATE POLICY "Public read kanban stages" ON public.kanban_stages FOR SELECT USING (TRUE);
 
--- Batches: Owner isolated
-CREATE POLICY "Users access own batches" ON public.batches 
-  FOR ALL USING (user_id = auth.uid());
+-- Anonymous / public access allowed for local demo sandbox
+CREATE POLICY "Public sandbox access batches" ON public.batches FOR ALL USING (TRUE);
+CREATE POLICY "Public sandbox access clay_bodies" ON public.clay_bodies FOR ALL USING (TRUE);
+CREATE POLICY "Public sandbox access ceramic_pieces" ON public.ceramic_pieces FOR ALL USING (TRUE);
+CREATE POLICY "Public sandbox access piece_stage_logs" ON public.piece_stage_logs FOR ALL USING (TRUE);
+CREATE POLICY "Public sandbox access glaze_recipes" ON public.glaze_recipes FOR ALL USING (TRUE);
+CREATE POLICY "Public sandbox access piece_glaze_layers" ON public.piece_glaze_layers FOR ALL USING (TRUE);
 
--- Clay Bodies
-CREATE POLICY "Read global or own clay bodies" ON public.clay_bodies 
-  FOR SELECT USING (is_global = TRUE OR user_id = auth.uid());
-CREATE POLICY "Manage own clay bodies" ON public.clay_bodies 
-  FOR ALL USING (user_id = auth.uid());
+-- Grant schema and table permissions to API roles for local sandbox access
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 
--- Ceramic Pieces: Owner isolated
-CREATE POLICY "Users access own pieces" ON public.ceramic_pieces 
-  FOR ALL USING (user_id = auth.uid());
-
--- Stage Logs: Owner isolated
-CREATE POLICY "Users access own stage logs" ON public.piece_stage_logs 
-  FOR ALL USING (user_id = auth.uid());
-
--- Glaze Recipes: Public read for global, owner read/write for custom
-CREATE POLICY "Read global or own glazes" ON public.glaze_recipes 
-  FOR SELECT USING (is_global = TRUE OR user_id = auth.uid());
-CREATE POLICY "Manage own glazes" ON public.glaze_recipes 
-  FOR ALL USING (user_id = auth.uid());
-
--- Glaze Layers: Owner isolated
-CREATE POLICY "Users access own glaze layers" ON public.piece_glaze_layers 
-  FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.ceramic_pieces p WHERE p.id = piece_id AND p.user_id = auth.uid())
-  );

@@ -4,7 +4,12 @@
 		"dockerfile": "Dockerfile"
 	},
 	"features": {
-		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+			"version": "latest"
+		}
+	},
+	"containerEnv": {
+		"VITE_SUPABASE_URL": "http://127.0.0.1:54321"
 	},
 	"customizations": {
 		"vscode": {
@@ -16,17 +21,77 @@
 				"svelte.svelte-vscode",
 				"bradlc.vscode-tailwindcss",
 				"esbenp.prettier-vscode",
-				"dbaeumer.vscode-eslint"
+				"dbaeumer.vscode-eslint",
+				"ms-playwright.playwright"
 			]
 		}
 	},
-	"forwardPorts": [3000, 5173],
+	"forwardPorts": [
+		3000,
+		5173,
+		54320,
+		54321,
+		54322,
+		54323,
+		54324,
+		54327,
+		54329
+	],
 	"portsAttributes": {
 		"3000": {
 			"label": "Kālai Web App",
 			"onAutoForward": "openBrowser"
+		},
+		"5173": {
+			"label": "Vite Dev Server",
+			"onAutoForward": "notify"
+		},
+		"54321": {
+			"label": "Supabase API Gateway",
+			"onAutoForward": "ignore"
+		},
+		"54322": {
+			"label": "Supabase Postgres DB",
+			"onAutoForward": "ignore"
+		},
+		"54323": {
+			"label": "Supabase Studio",
+			"onAutoForward": "notify"
+		},
+		"54324": {
+			"label": "Supabase Email Testing (Mailpit)",
+			"onAutoForward": "notify"
+		},
+		"54327": {
+			"label": "Supabase Analytics",
+			"onAutoForward": "ignore"
+		},
+		"54329": {
+			"label": "Supabase Connection Pooler",
+			"onAutoForward": "ignore"
 		}
 	},
-	"postCreateCommand": "npm install",
+	"postCreateCommand": "npm install && npx playwright install --with-deps",
+	// "postStartCommand": ".devcontainer/setup.sh",
+	// --network=host: share the host's network namespace so localhost inside
+	// the dev container is the same localhost where -p mappings bind (e.g.
+	// Supabase's host-published ports). Required so the Supabase CLI's
+	// localhost:54322 connection from inside the container actually reaches
+	// postgres. Community-validated pattern: supabase/cli#1939. Works on
+	// Docker Desktop because the "host" we share is the Linux VM where
+	// docker actually runs.
+	"runArgs": [
+		"--network=host"
+	],
+	// Mount the workspace at the SAME path inside the container as on the
+	// host. Required for DooD: when a tool inside the container asks the
+	// host's docker to bind-mount workspace files into a sibling container
+	// (e.g. Supabase Studio binds supabase/snippets), docker resolves the
+	// path on the host's filesystem. If container path != host path, the
+	// host can't find it and rejects the mount with "path not shared from
+	// the host." Setting target=${localWorkspaceFolder} aligns them on
+	// both Mac and Windows.
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspace/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+	"workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
 	"remoteUser": "node"
 }

@@ -8,9 +8,10 @@
 	import Maximize2 from 'lucide-svelte/icons/maximize-2';
 	import Minimize2 from 'lucide-svelte/icons/minimize-2';
 	import ChevronDown from 'lucide-svelte/icons/chevron-down';
+	import Database from 'lucide-svelte/icons/database';
 	import Check from 'lucide-svelte/icons/check';
 
-	let { children } = $props();
+	let { data, children } = $props();
 
 	const THEMES = [
 		'light', 'dark', 'retro', 'coffee', 'cupcake', 'bumblebee', 'emerald', 'corporate', 
@@ -84,6 +85,17 @@
 					<div class="flex items-center gap-2">
 						<h1 class="font-display font-bold text-lg sm:text-xl tracking-tight text-base-content">kālai</h1>
 						<span class="badge badge-primary badge-outline badge-sm uppercase text-[10px] font-bold tracking-wider">Studio Board</span>
+						{#if data?.isConnected}
+							<span class="badge badge-success badge-sm gap-1 text-[10px] font-semibold" title="Connected to Local Supabase Database (Port 54321)">
+								<Database class="w-3 h-3" />
+								<span>Supabase Live</span>
+							</span>
+						{:else}
+							<span class="badge badge-ghost badge-sm gap-1 text-[10px] text-base-content/70" title="Offline / Demo Sandbox Fallback Mode">
+								<Database class="w-3 h-3 text-warning" />
+								<span>Demo Sandbox</span>
+							</span>
+						{/if}
 					</div>
 					<p class="text-xs text-base-content/70">Ceramic Piece Lifecycle & Kanban Tracker</p>
 				</div>
