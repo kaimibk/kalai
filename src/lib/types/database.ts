@@ -105,6 +105,8 @@ export interface CeramicPiece {
 	// FK to pyrometric_cones
 	target_bisque_cone: string;
 	target_glaze_cone: string;
+	target_bisque_cone_rel?: PyrometricCone | null;
+	target_glaze_cone_rel?: PyrometricCone | null;
 	
 	weight_grams?: number | null;
 	length_cm?: number | null;

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { CeramicPiece, ClayBody, GlazeRecipe, PieceGlazeLayer, PieceBatch, PieceStageLog } from '$lib/types/database';
+import type { CeramicPiece, ClayBody, GlazeRecipe, PieceGlazeLayer, PieceBatch, PieceStageLog, PyrometricCone } from '$lib/types/database';
 
 const DEFAULT_ANON_KEY = 'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
 
@@ -49,23 +49,25 @@ export async function checkSupabaseConnection(timeoutMs = 1500, customFetch?: ty
 }
 
 /**
- * Fetch all studio data (ceramic_pieces, clay_bodies, glaze_recipes) from Supabase.
+ * Fetch all studio data (ceramic_pieces, clay_bodies, glaze_recipes, pyrometric_cones) from Supabase.
  */
 export async function fetchStudioData(customFetch?: typeof fetch) {
 	const client = getSupabaseClient(customFetch);
-	const [piecesRes, claysRes, glazesRes] = await Promise.all([
+	const [piecesRes, claysRes, glazesRes, conesRes] = await Promise.all([
 		client
 			.from('ceramic_pieces')
-			.select('*, batch:batches(*), stage_logs:piece_stage_logs(*), glaze_layers:piece_glaze_layers(*)'),
+			.select('*, target_bisque_cone_rel:pyrometric_cones!target_bisque_cone(*), target_glaze_cone_rel:pyrometric_cones!target_glaze_cone(*), batch:batches(*), stage_logs:piece_stage_logs(*), glaze_layers:piece_glaze_layers(*)'),
 		client.from('clay_bodies').select('*'),
-		client.from('glaze_recipes').select('*')
+		client.from('glaze_recipes').select('*'),
+		client.from('pyrometric_cones').select('*').order('display_order')
 	]);
 
 	return {
 		pieces: (piecesRes.data as CeramicPiece[] | null) || null,
 		clayBodies: (claysRes.data as ClayBody[] | null) || null,
 		glazes: (glazesRes.data as GlazeRecipe[] | null) || null,
-		error: piecesRes.error || claysRes.error || glazesRes.error || null
+		cones: (conesRes.data as PyrometricCone[] | null) || null,
+		error: piecesRes.error || claysRes.error || glazesRes.error || conesRes.error || null
 	};
 }
 
@@ -96,7 +98,7 @@ export async function updatePieceStageDb(pieceId: string, stage: string, notes?:
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function sanitizePiecePayload(piece: Partial<CeramicPiece>) {
-	const { batch, stage_logs, glaze_layers, id, ...clean } = piece;
+	const { batch, stage_logs, glaze_layers, target_bisque_cone_rel, target_glaze_cone_rel, id, ...clean } = piece as any;
 
 	if (clean.clay_body_id && typeof clean.clay_body_id === 'string' && !UUID_REGEX.test(clean.clay_body_id)) {
 		clean.clay_body_id = null;
@@ -123,7 +125,7 @@ export async function insertPieceDb(piece: Partial<CeramicPiece>) {
 	const { data, error } = await supabase
 		.from('ceramic_pieces')
 		.insert([payload])
-		.select('*, batch:batches(*), stage_logs:piece_stage_logs(*), glaze_layers:piece_glaze_layers(*)')
+		.select('*, target_bisque_cone_rel:pyrometric_cones!target_bisque_cone(*), target_glaze_cone_rel:pyrometric_cones!target_glaze_cone(*), batch:batches(*), stage_logs:piece_stage_logs(*), glaze_layers:piece_glaze_layers(*)')
 		.single();
 
 	if (error) throw error;
@@ -148,7 +150,7 @@ export async function updatePieceDb(pieceId: string, updates: Partial<CeramicPie
 		.from('ceramic_pieces')
 		.update(payload)
 		.eq('id', pieceId)
-		.select('*, batch:batches(*), stage_logs:piece_stage_logs(*), glaze_layers:piece_glaze_layers(*)')
+		.select('*, target_bisque_cone_rel:pyrometric_cones!target_bisque_cone(*), target_glaze_cone_rel:pyrometric_cones!target_glaze_cone(*), batch:batches(*), stage_logs:piece_stage_logs(*), glaze_layers:piece_glaze_layers(*)')
 		.single();
 
 	if (error) throw error;
